@@ -1,6 +1,7 @@
 library(biomaRt)
 library(stringr)
 library(ggplot2)
+library(cowplot)
 
 listEnsembl()
 listEnsemblArchives()
@@ -523,3 +524,46 @@ ggplot(D4_H2Db, aes(x=D4_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=D4_txn_
 
 ggplot(D4_H2Kb, aes(x=D4_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=D4_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
   labs(title="D4 H-2-Kb VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+
+# get intersection of all and vaf
+inAllSamples <- Reduce(intersect, list(A223_H2Db$uniqueID, C12_H2Db$uniqueID, D4_H2Db$uniqueID, H10_H2Db$uniqueID))
+A223_h2db_intersect <- A223_H2Db[which(inAllSamples %in% A223_H2Db$uniqueID),c("A223_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+C12_h2db_intersect <- C12_H2Db[which(inAllSamples %in% C12_H2Db$uniqueID),c("C12_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+H10_h2db_intersect <- H10_H2Db[which(inAllSamples %in% H10_H2Db$uniqueID),c("H10_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+D4_h2db_intersect <- D4_H2Db[which(inAllSamples %in% D4_H2Db$uniqueID),c("D4_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+
+
+names(A223_h2db_intersect)[1] <- 'WES_DNA_vaf'
+names(C12_h2db_intersect)[1] <- 'WES_DNA_vaf'
+names(H10_h2db_intersect)[1] <- 'WES_DNA_vaf'
+names(D4_h2db_intersect)[1] <- 'WES_DNA_vaf'
+
+library(gridExtra)
+library(grid)
+library(wesanderson)
+grouped <- rbind(A223_h2db_intersect, C12_h2db_intersect, H10_h2db_intersect, D4_h2db_intersect)
+grouped$uniqueID <- as.character(grouped$uniqueID)
+strong <- grouped[which(grouped$strength == "none->strong"),]
+for (peptide in unique(strong$uniqueID)) {
+  tmp <- strong[which(strong$uniqueID == peptide),]
+  tmp1<-tmp[,c("RNA_avgVAF", "sample", "uniqueID", "gene")]
+  tmp1$biotype <- "RNA"
+  tmp2<-tmp[,c("WES_DNA_vaf", "sample", "uniqueID", "gene")]
+  tmp2$biotype <- "DNA"
+  names(tmp1)[1] <- "VAF"
+  names(tmp2)[1] <- "VAF"
+  tmp<-rbind(tmp1, tmp2)
+  print(ggplot(tmp, aes(fill=sample, y=VAF, x=biotype)) + geom_bar(position="dodge", stat="identity") + scale_fill_manual(values=wes_palette(n=4, name="Darjeeling2")) + 
+          labs(title = paste(tmp$uniqueID)) + theme(plot.title = element_text(hjust = 0.5)))
+}
+# par(mfrow = c(5, 5))
+# #listOfGraphs <- list()
+# chr1<-grouped[which(startsWith(grouped$uniqueID, "1_")),]
+# for (peptide in chr1$uniqueID) {
+#   tmp <- chr1[which(chr1$uniqueID == peptide),]
+#   print(ggplot(tmp, aes(fill=sample, y=RNA_avgVAF, x=as.factor(uniqueID))) + geom_bar(position="dodge", stat="identity"))
+#   #listOfGraphs <- c(listOfGraphs, newtmp)
+# }
+# do.call(grid.arrange, c(listOfGraphs, nrow = 5))
+
