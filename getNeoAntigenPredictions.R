@@ -1,5 +1,6 @@
 library(biomaRt)
 library(stringr)
+library(ggplot2)
 
 listEnsembl()
 listEnsemblArchives()
@@ -130,15 +131,16 @@ window=kmerLength-1
 
 
 
+############# POST NEOANTIGEN PREDICTION ####################
 #strong binder = rank<= 0.5%
 #weak binder = rank>0.5% and rank<= 2%
 #no binding = rank>2%
 
 
-mut_h2db<-read.csv("Downloads/software/netMHC-4.0/wt_mhc1_H2Db_9mer_predictions.tsv", sep = "\t")
-wt_h2db <- read.csv("Downloads/software/netMHC-4.0/mut_mhc1_H2Db_9mer_predictions.tsv", sep="\t")
-mut_h2kb<-read.csv("Downloads/software/netMHC-4.0/wt_mhc1_H2Kb_9mer_predictions.tsv", sep = "\t")
-wt_h2kb <- read.csv("Downloads/software/netMHC-4.0/mut_mhc1_H2Kb_9mer_predictions.tsv", sep="\t")
+mut_h2db<-read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/proteinPrediction/MUT_proteinSequences9mers_MHC_class_I_H2Db_allele.tsv", sep = "\t", skip = 1)
+wt_h2db <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/proteinPrediction/WT_proteinSequences9mers_MHC_class_I_H2Db_allele.tsv", sep="\t", skip = 1)
+mut_h2kb<-read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/proteinPrediction/MUT_proteinSequences9mers_MHC_class_I_H2Kb_allele.tsv", sep = "\t", skip = 1)
+wt_h2kb <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/proteinPrediction/WT_proteinSequences9mers_MHC_class_I_H2Kb_allele.tsv", sep="\t", skip = 1)
 
 mut_h2db$mhc_allele <- "H-2-Db"
 wt_h2db$mhc_allele <- "H-2-Db"
@@ -162,14 +164,14 @@ mut_h2kb$bind_strength[which(mut_h2kb$Rank > 0.5 & mut_h2kb$Rank <= 2.0)] <- "we
 wt_h2kb$bind_strength[which(wt_h2kb$Rank > 0.5 & wt_h2kb$Rank <= 2.0)] <- "weak"
 
 
-names(mut_h2db) <- c("Pos", "Peptide_mut", "ID", "nM_mut", "Rank_mut", "Core_mut", "H_Avg_Ranks_mut", "N_binders_mut", "mhc_allele_mut", "bind_strength_mut")
-names(mut_h2kb) <- c("Pos", "Peptide_mut", "ID", "nM_mut", "Rank_mut", "Core_mut", "H_Avg_Ranks_mut", "N_binders_mut", "mhc_allele_mut", "bind_strength_mut")
-names(wt_h2db) <- c("Pos", "Peptide_wt", "ID", "nM_wt", "Rank_wt", "Core_wt", "H_Avg_Ranks_wt", "N_binders_wt", "mhc_allele_wt", "bind_strength_wt")
-names(wt_h2kb) <- c("Pos", "Peptide_wt", "ID", "nM_wt", "Rank_wt", "Core_wt", "H_Avg_Ranks_wt", "N_binders_wt", "mhc_allele_wt", "bind_strength_wt")
+names(mut_h2db) <- c("Pos", "Peptide_mut", "proteinID", "nM_mut", "Rank_mut", "Core_mut", "H_Avg_Ranks_mut", "N_binders_mut", "mhc_allele_mut", "bind_strength_mut")
+names(mut_h2kb) <- c("Pos", "Peptide_mut", "proteinID", "nM_mut", "Rank_mut", "Core_mut", "H_Avg_Ranks_mut", "N_binders_mut", "mhc_allele_mut", "bind_strength_mut")
+names(wt_h2db) <- c("Pos", "Peptide_wt", "proteinID", "nM_wt", "Rank_wt", "Core_wt", "H_Avg_Ranks_wt", "N_binders_wt", "mhc_allele_wt", "bind_strength_wt")
+names(wt_h2kb) <- c("Pos", "Peptide_wt", "proteinID", "nM_wt", "Rank_wt", "Core_wt", "H_Avg_Ranks_wt", "N_binders_wt", "mhc_allele_wt", "bind_strength_wt")
 
 
-mergePredsH2Db <- merge(x=mut_h2db, y = wt_h2db, by = c("ID", "Pos"), all = T)
-mergePredsH2Kb <- merge(x=mut_h2kb, y = wt_h2kb, by = c("ID", "Pos"), all = T)
+mergePredsH2Db <- merge(x=mut_h2db, y = wt_h2db, by = c("proteinID", "Pos"), all = T)
+mergePredsH2Kb <- merge(x=mut_h2kb, y = wt_h2kb, by = c("proteinID", "Pos"), all = T)
 
 bindH2DbMutOnly <- mergePredsH2Db[which(mergePredsH2Db$N_binders_mut == 1 & mergePredsH2Db$N_binders_wt == 0),]
 bindH2KbMutOnly <- mergePredsH2Kb[which(mergePredsH2Kb$N_binders_mut == 1 & mergePredsH2Kb$N_binders_wt == 0),]
@@ -180,18 +182,344 @@ bindH2KbBoth <- mergePredsH2Kb[which(mergePredsH2Kb$bind_strength_mut == "strong
 H2Db_peptides <- rbind(bindH2DbBoth, bindH2DbMutOnly)
 H2Kb_peptides <- rbind(bindH2KbBoth, bindH2KbMutOnly)
 
-combineAll <- rbind(H2Db_peptides, H2Kb_peptides)
-combineAll$otherTx <- ""
+map = read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/proteinPrediction/map_dictionary.tsv", sep="\t")
 
-combineAll$ID <- as.character(combineAll$ID)
-for (vars in 1:nrow(combineAll)){
-  print(vars)
-  if (startsWith(combineAll[vars,"ID"], prefix = "p")){
-    tmp <- stringr::str_split(combineAll[vars,"ID"], pattern = "_", n=2)
-    print(tmp)
-    combineAll[vars, "otherTx"] <- tmp[[1]][1]
-    combineAll[vars, "ID"] <- tmp[[1]][2]
+H2Db_merged <- merge(H2Db_peptides, map, by = "proteinID", all.x = T)
+H2Kb_merged <- merge(H2Kb_peptides, map, by = "proteinID", all.x = T)
+
+# sample A223 txn counts -- move to new Test
+
+############################## NEW TEST #########################################
+
+# code for one sample of one allele
+
+library(tidyverse)
+txn <- read.csv("/home/tonya/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/quants/D4-RNA_quants/D4_quant.sf", sep="\t", header = T, col.names = c('Name', 'Length', 'EffectiveLength', 'D4_TPM', 'D4_NumReads'), colClasses = c("character"))
+test <- as_tibble(txn) %>% separate(Name, into = c("txn", "subTxn"), "\\.", extra = "merge")
+H2Db_merged$D4_counts <- ''
+H2Db_merged$D4_txn_thresh <- 0
+H2Db_merged$D4_txn_max <- 0
+TPMthreshold = 1
+
+for (row in 1:nrow(H2Db_merged)) {
+  counts = ''
+  getMaxTPM = c()
+  search <- stringr::str_split(H2Db_merged[row, "Transcripts"], ";")[[1]]
+  tmp <- test[which(test$txn %in% search),]
+  for (i in seq(length(search))){
+    getMaxTPM <- c(getMaxTPM, as.numeric(as.character(tmp$D4_TPM[i])))
+    counts = paste(paste(tmp$txn[i],tmp$D4_TPM[i],tmp$D4_NumReads[i],sep="="), ";", counts, sep="")
+  }
+  H2Db_merged[row, "D4_counts"] <- counts
+  if (max(getMaxTPM) > TPMthreshold){
+    H2Db_merged[row, "D4_txn_thresh"] <- 1
+    H2Db_merged[row, "D4_txn_max"] <- max(getMaxTPM)
   }
 }
 
-combineAll %>% separate(ID, c("col1", "col2"), "_")
+read_in_variants <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_DNA_RNA_variant_info.tsv", sep="\t")
+read_in_variants$SNP <- ''
+read_in_variants$SNP <- paste(read_in_variants$ref, read_in_variants$alt, sep="/")
+names(H2Db_merged)[19] <- "chromosome"
+names(H2Db_merged)[20] <- "position"
+D4_final <- merge(H2Db_merged, read_in_variants, by = c("chromosome", "position", "SNP"), all.x = T)
+D4_final$RNA_totalReads_mean=rowMeans(D4_final[,c("D4_tophat2_RNA_totalReads", "D4_star_RNA_totalReads", "D4_hisat2_RNA_totalReads")], na.rm=TRUE)
+D4_final_cleaned_H2Db <- D4_final[which((D4_final$D4_txn_thresh == 1) & (D4_final$D4_WES_DNA_totalReads >= 10) & (D4_final$RNA_totalReads_mean >=10)),]
+write.table(D4_final_cleaned_H2Db, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_H2Db_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+
+# other allele
+
+txn <- read.csv("/home/tonya/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/quants/D4-RNA_quants/D4_quant.sf", sep="\t", header = T, col.names = c('Name', 'Length', 'EffectiveLength', 'D4_TPM', 'D4_NumReads'), colClasses = c("character"))
+test <- as_tibble(txn) %>% separate(Name, into = c("txn", "subTxn"), "\\.", extra = "merge")
+H2Kb_merged$D4_counts <- ''
+H2Kb_merged$D4_txn_thresh <- 0
+TPMthreshold = 1
+H2Kb_merged$D4_txn_max <- 0
+
+for (row in 1:nrow(H2Kb_merged)) {
+  counts = ''
+  getMaxTPM = c()
+  search <- stringr::str_split(H2Kb_merged[row, "Transcripts"], ";")[[1]]
+  tmp <- test[which(test$txn %in% search),]
+  for (i in seq(length(search))){
+    getMaxTPM <- c(getMaxTPM, as.numeric(as.character(tmp$D4_TPM[i])))
+    counts = paste(paste(tmp$txn[i],tmp$D4_TPM[i],tmp$D4_NumReads[i],sep="="), ";", counts, sep="")
+  }
+  H2Kb_merged[row, "D4_counts"] <- counts
+  if (max(getMaxTPM) > TPMthreshold){
+    H2Kb_merged[row, "D4_txn_thresh"] <- 1
+    H2Kb_merged[row, "D4_txn_max"] <- max(getMaxTPM)
+  }
+}
+
+read_in_variants <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_DNA_RNA_variant_info.tsv", sep="\t")
+read_in_variants$SNP <- ''
+read_in_variants$SNP <- paste(read_in_variants$ref, read_in_variants$alt, sep="/")
+names(H2Kb_merged)[19] <- "chromosome"
+names(H2Kb_merged)[20] <- "position"
+D4_final <- merge(H2Kb_merged, read_in_variants, by = c("chromosome", "position", "SNP"), all.x = T)
+D4_final$RNA_totalReads_mean=rowMeans(D4_final[,c("D4_tophat2_RNA_totalReads", "D4_star_RNA_totalReads", "D4_hisat2_RNA_totalReads")], na.rm=TRUE)
+D4_final_cleaned_H2Kb <- D4_final[which((D4_final$D4_txn_thresh == 1) & (D4_final$D4_WES_DNA_totalReads >= 10) & (D4_final$RNA_totalReads_mean >=10)),]
+write.table(D4_final_cleaned_H2Kb, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_H2Kb_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+
+
+
+# all data merge
+A223_H2Db <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/A223/A223_H2Db_final_neoantigen_candidates.txt", sep="\t")
+C12_H2Db <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/C12/C12_H2Db_final_neoantigen_candidates.txt", sep="\t")
+H10_H2Db <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/H10/H10_H2Db_final_neoantigen_candidates.txt", sep="\t")
+D4_H2Db <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_H2Db_final_neoantigen_candidates.txt", sep="\t")
+
+A223_H2Db$uniqueID <- paste(A223_H2Db$chromosome, A223_H2Db$position, A223_H2Db$SNP, A223_H2Db$Peptide_mut, sep="_")
+C12_H2Db$uniqueID <- paste(C12_H2Db$chromosome, C12_H2Db$position, C12_H2Db$SNP, C12_H2Db$Peptide_mut, sep="_")
+H10_H2Db$uniqueID <- paste(H10_H2Db$chromosome, H10_H2Db$position, H10_H2Db$SNP, H10_H2Db$Peptide_mut, sep="_")
+D4_H2Db$uniqueID <- paste(D4_H2Db$chromosome, D4_H2Db$position, D4_H2Db$SNP, D4_H2Db$Peptide_mut, sep="_")
+
+venn.diagram(x = list(A223_H2Db$uniqueID, C12_H2Db$uniqueID, D4_H2Db$uniqueID, H10_H2Db$uniqueID), 
+             category.names = c("A223", "C12", "D4", "H10"), 
+             filename = "H2Db_neoantigen_shared_across_clones.png", 
+             imagetype = "png",
+             height = 1000,
+             width = 1000,
+             col=c("#440154ff", '#21908dff', '#cc6677', '#FFA23A'),
+             fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3), alpha('#cc6677',0.3), alpha('#FFA23A',0.3)),
+             cex = 0.5,
+             fontfamily = "sans",
+             cat.cex = 0.7,
+             cat.default.pos = "outer",
+             cat.col = c("#440154ff", '#21908dff', '#cc6677', '#FFA23A'),
+             cat.fontfamily = "sans", 
+             main = "MHC-I H2Db")
+
+
+
+# all data merge
+A223_H2Kb <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/A223/A223_H2Kb_final_neoantigen_candidates.txt", sep="\t")
+C12_H2Kb <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/C12/C12_H2Kb_final_neoantigen_candidates.txt", sep="\t")
+H10_H2Kb <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/H10/H10_H2Kb_final_neoantigen_candidates.txt", sep="\t")
+D4_H2Kb <- read.csv("projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_H2Kb_final_neoantigen_candidates.txt", sep="\t")
+
+A223_H2Kb$uniqueID <- paste(A223_H2Kb$chromosome, A223_H2Kb$position, A223_H2Kb$SNP, A223_H2Kb$Peptide_mut, sep="_")
+C12_H2Kb$uniqueID <- paste(C12_H2Kb$chromosome, C12_H2Kb$position, C12_H2Kb$SNP, C12_H2Kb$Peptide_mut, sep="_")
+H10_H2Kb$uniqueID <- paste(H10_H2Kb$chromosome, H10_H2Kb$position, H10_H2Kb$SNP, H10_H2Kb$Peptide_mut, sep="_")
+D4_H2Kb$uniqueID <- paste(D4_H2Kb$chromosome, D4_H2Kb$position, D4_H2Kb$SNP, D4_H2Kb$Peptide_mut, sep="_")
+library(VennDiagram)
+venn.diagram(x = list(A223_H2Kb$uniqueID, C12_H2Kb$uniqueID, D4_H2Kb$uniqueID, H10_H2Kb$uniqueID), 
+             category.names = c("A223", "C12", "D4", "H10"), 
+             filename = "H2Kb_neoantigen_shared_across_clones.png", 
+             imagetype = "png",
+             height = 1000,
+             width = 1000,
+             col=c("#0072b2", '#f0e442', '#cc79a7', '#e69f00'),
+             fill = c(alpha("#0072b2",0.3), alpha('#f0e442',0.3), alpha('#cc79a7',0.3), alpha('#e69f00',0.3)),
+             cex = 0.5,
+             fontfamily = "sans",
+             cat.cex = 0.7,
+             cat.default.pos = "outer",
+             cat.col = c("#0072b2", '#f0e442', '#cc79a7', '#e69f00'),
+             cat.fontfamily = "sans",
+             main = "MHC-I H2Kb")
+
+# bind strength prediction
+A223_H2Db$strength <- paste(A223_H2Db$bind_strength_wt, A223_H2Db$bind_strength_mut, sep="->")
+A223_H2Db$sample <- "A223"
+C12_H2Db$strength <- paste(C12_H2Db$bind_strength_wt, C12_H2Db$bind_strength_mut, sep="->")
+C12_H2Db$sample <- "C12"
+H10_H2Db$strength <- paste(H10_H2Db$bind_strength_wt, H10_H2Db$bind_strength_mut, sep="->")
+H10_H2Db$sample <- "H10"
+D4_H2Db$strength<- paste(D4_H2Db$bind_strength_wt, D4_H2Db$bind_strength_mut, sep="->")
+D4_H2Db$sample <- "D4"
+
+allSamples <- rbind(A223_H2Db[,c('sample', 'strength')], C12_H2Db[,c('sample', 'strength')], H10_H2Db[,c('sample', 'strength')], D4_H2Db[,c('sample', 'strength')])
+
+mutStengthSummary <- allSamples %>% group_by(sample, strength) %>% tally()
+library(ggplot2)
+library(viridis)
+
+ggplot(mutStengthSummary, aes(fill=strength, y=n, x=sample)) + 
+  geom_bar(position="stack", stat="identity") +
+  scale_fill_viridis(discrete = T) +
+  ggtitle("H2Db Predicted Protein Bind Strength Based on Missense Mutation") +
+  xlab("") +  labs(fill = "Predicted Bind Strength (WT -> MUT)") + ylab("Total number of predicted neoantigen") +
+  theme(legend.position = "bottom", legend.box = "vertical", text = element_text(size=20), plot.title = element_text(hjust = 0.5))
+
+# bind strength other allele
+
+A223_H2Kb$strength <- paste(A223_H2Kb$bind_strength_wt, A223_H2Kb$bind_strength_mut, sep="->")
+A223_H2Kb$sample <- "A223"
+C12_H2Kb$strength <- paste(C12_H2Kb$bind_strength_wt, C12_H2Kb$bind_strength_mut, sep="->")
+C12_H2Kb$sample <- "C12"
+H10_H2Kb$strength <- paste(H10_H2Kb$bind_strength_wt, H10_H2Kb$bind_strength_mut, sep="->")
+H10_H2Kb$sample <- "H10"
+D4_H2Kb$strength<- paste(D4_H2Kb$bind_strength_wt, D4_H2Kb$bind_strength_mut, sep="->")
+D4_H2Kb$sample <- "D4"
+
+allSamples <- rbind(A223_H2Kb[,c('sample', 'strength')], C12_H2Kb[,c('sample', 'strength')], H10_H2Kb[,c('sample', 'strength')], D4_H2Kb[,c('sample', 'strength')])
+
+mutStengthSummary <- allSamples %>% group_by(sample, strength) %>% tally()
+library(ggplot2)
+library(viridis)
+
+ggplot(mutStengthSummary, aes(fill=strength, y=n, x=sample)) + 
+  geom_bar(position="stack", stat="identity") +
+  scale_fill_viridis(discrete = T) +
+  ggtitle("H2Kb Predicted Protein Bind Strength Based on Missense Mutation") +
+  xlab("") +  labs(fill = "Predicted Bind Strength (WT -> MUT)") + ylab("Total number of predicted neoantigen") +
+  theme(legend.position = "bottom", legend.box = "vertical", text = element_text(size=20), plot.title = element_text(hjust = 0.5))
+
+
+
+# gene location of neoantigens
+A223_H2Db$gene <- ''
+for (row in 1:nrow(A223_H2Db)) {
+  A223_H2Db[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(A223_H2Db$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+
+A223_H2Kb$gene <- ''
+for (row in 1:nrow(A223_H2Kb)) {
+  A223_H2Kb[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(A223_H2Kb$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+
+write.table(A223_H2Db, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/A223/A223_H2Db_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+write.table(A223_H2Kb, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/A223/A223_H2Kb_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+
+
+
+A223_H2Db_new <- A223_H2Db %>% group_by(strength, gene) %>% tally()
+A223_H2Kb_new <- A223_H2Kb %>% group_by(strength, gene) %>% tally()
+
+A223_H2Db_new$Sample <- ''
+A223_H2Kb_new$Sample <- ''
+
+A223_H2Db_new$Sample <- "A223"
+A223_H2Kb_new$Sample <- "A223"
+
+C12_H2Db$gene <- ''
+for (row in 1:nrow(C12_H2Db)) {
+  C12_H2Db[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(C12_H2Db$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+
+C12_H2Kb$gene <- ''
+for (row in 1:nrow(C12_H2Kb)) {
+  C12_H2Kb[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(C12_H2Kb$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+write.table(C12_H2Db, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/C12/C12_H2Db_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+write.table(C12_H2Kb, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/C12/C12_H2Kb_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+
+C12_H2Db_new <- C12_H2Db %>% group_by(strength, gene) %>% tally()
+C12_H2Kb_new <- C12_H2Kb %>% group_by(strength, gene) %>% tally()
+
+C12_H2Db_new$Sample <- ''
+C12_H2Kb_new$Sample <- ''
+
+C12_H2Db_new$Sample <- "C12"
+C12_H2Kb_new$Sample <- "C12"
+
+
+H10_H2Db$gene <- ''
+for (row in 1:nrow(H10_H2Db)) {
+  H10_H2Db[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(H10_H2Db$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+
+H10_H2Kb$gene <- ''
+for (row in 1:nrow(H10_H2Kb)) {
+  H10_H2Kb[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(H10_H2Kb$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+
+write.table(H10_H2Db, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/H10/H10_H2Db_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+write.table(H10_H2Kb, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/H10/H10_H2Kb_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+
+H10_H2Db_new <- H10_H2Db %>% group_by(strength, gene) %>% tally()
+H10_H2Kb_new <- H10_H2Kb %>% group_by(strength, gene) %>% tally()
+
+
+H10_H2Db_new$Sample <- ''
+H10_H2Kb_new$Sample <- ''
+
+H10_H2Db_new$Sample <- "H10"
+H10_H2Kb_new$Sample <- "H10"
+
+D4_H2Db$gene <- ''
+for (row in 1:nrow(D4_H2Db)) {
+  D4_H2Db[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(D4_H2Db$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+
+D4_H2Kb$gene <- ''
+for (row in 1:nrow(D4_H2Kb)) {
+  D4_H2Kb[row, 'gene'] <- getBM(attributes = c("ensembl_gene_id","mgi_symbol"),  filters = "ensembl_transcript_id", values = str_split(D4_H2Kb$Transcripts[row], ";")[[1]][1], mart = ensembl)$mgi_symbol
+}
+
+write.table(D4_H2Db, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_H2Db_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+write.table(D4_H2Kb, "~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_H2Kb_final_neoantigen_candidates.txt", sep="\t", quote = F, row.names = F)
+
+
+D4_H2Db_new <- D4_H2Db %>% group_by(strength, gene) %>% tally()
+D4_H2Kb_new <- D4_H2Kb %>% group_by(strength, gene) %>% tally()
+
+D4_H2Db_new$Sample <- ''
+D4_H2Kb_new$Sample <- ''
+
+D4_H2Db_new$Sample <- "D4"
+D4_H2Kb_new$Sample <- "D4"
+
+# upset plot
+library(ComplexUpset)
+# gene
+test <- rbind(A223_H2Db_new, C12_H2Db_new, H10_H2Db_new, D4_H2Db_new)
+none2strong <- test[which(test$strength == "none->strong"),c('gene', 'Sample')]
+
+library(reshape2)
+
+test <-melt(data = none2strong, measure.vars = c("gene")) %>% binarize()
+test$Sample <- ''
+test$Sample[which(test$Sample__A223 == 1)] <- "A223"
+test$Sample[which(test$Sample__C12 == 1)] <- "C12"
+test$Sample[which(test$Sample__D4 == 1)] <- "D4"
+test$Sample[which(test$Sample__H10 == 1)] <- "H10"
+
+names(test)[5:18] <- c("Apobec3", "Cenpe", "Dbf4", "Dguok", "Evc2", "Fanci", "Heatr5a", "Hjurp", "Kif13a", "Lipo3", "Mtus1", "Rasip1", "Sfxn4", "Xrcc4")
+
+genes = colnames(test)[5:18]
+upset(
+  test,
+  genes,
+  base_annotations=list(
+    'Intersection size'=intersection_size(
+      counts=FALSE,
+      mapping=aes(fill=Sample)
+    ) + scale_fill_manual(values=c(
+      'A223'='#E41A1C', 'C12'='#377EB8',
+      'H10'='#4DAF4A', 'D4'='#FF7F00'
+    ))
+  ),
+  width_ratio=0.1
+)
+
+# NOTE this is something where interactive would be nice
+#A223
+ggplot(A223_H2Db, aes(x=A223_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=A223_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="A223 H-2-Db VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+ggplot(A223_H2Kb, aes(x=A223_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=A223_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="A223 H-2-Kb VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+#C12
+ggplot(C12_H2Db, aes(x=C12_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=C12_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="C12 H-2-Db VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+ggplot(C12_H2Kb, aes(x=C12_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=C12_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="C12 H-2-Kb VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+#H10
+ggplot(H10_H2Db, aes(x=H10_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=H10_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="H10 H-2-Db VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+ggplot(H10_H2Kb, aes(x=H10_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=H10_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="H10 H-2-Kb VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+#D4
+ggplot(D4_H2Db, aes(x=D4_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=D4_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="D4 H-2-Db VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
+
+ggplot(D4_H2Kb, aes(x=D4_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=D4_txn_max)) + geom_point() + theme(legend.position="top", plot.title = element_text(hjust = 0.5)) + 
+  labs(title="D4 H-2-Kb VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
