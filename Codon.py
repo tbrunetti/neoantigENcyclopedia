@@ -26,7 +26,7 @@ class Codon:
         if charge not in charge_options:
             raise ValueError('%s is not an option for the charge attribute.' % charge)
         
-        if hydrogen_donor_status not in donor_status:
+        if hydrogen_donor_status not in donor_options:
             raise ValueError('%s is not an option for the hydrogen_donor_status attribute.' % hydrogen_donor_status)
         
         if polarity not in polarity_options:
