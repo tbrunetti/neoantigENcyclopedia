@@ -1,8 +1,13 @@
 import Bio
 import pandas
 import argparse
+import sys
+import os
+sys.path.append(os.getcwd())
+from Codon import *
+from funcsForRefs import *
 
-def combine_data(junctionFiles):
+def combine_data(junctionFiles : list) -> pandas.Dataframe:
     
     # setting args.SJfiles is tmp just so we don't have to use parser right away for development and testing"
     junctionFiles = ['/mnt/IM_drive/Jill_Slansky/neoantigen_alternative_splicing_project_07122021/new_analysis_tonya_07212021/RNA_differential_alternative_splicing_spladder/output/1_EO771_EV_untreated_S7_spladder_inputSJ.out.tab', 
@@ -46,9 +51,9 @@ def intron_retention(junctions, spladderOut):
     
     # merge data frame (ignore strand since some discrpenacies with undetermined in star vs determined in spladder)
     info_combine = as_events.merge(junctions, how = 'left', on = ['chrom', 'intron_start', 'intron_end'])
-    info_combine.to_csv("testing_introns.tsv", sep = "\t", index = False)
+    # info_combine.to_csv("testing_introns.tsv", sep = "\t", index = False)
     
-    #TO DO: check strand
+    # TO DO: check strand
    
 
 def exon_skip():
@@ -66,11 +71,13 @@ def mutex():
 def multiExon_skip():
     pass
 
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description= '')
+    parser = argparse.ArgumentParser(description= 'identification of peptides derived from alternative splice events from neojunctions')
     
     parser.add_argument('--SJfiles', required = True, action = 'extend', nargs= '+', type = str, help = 'list of all SJ.out.tab files from STAR two-pass mode')
-    
+    parser.add_argument('--deASE', type = str, default = None, help = "spladder output of differentially expressed alternative splice events, if using results based on DE")
     args = parser.parse_args()
     
+    codon_library = generate_codon_reference()
     junctions = combine_data(junctionFiles = args.SJfiles)
