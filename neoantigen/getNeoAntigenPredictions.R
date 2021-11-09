@@ -526,12 +526,26 @@ ggplot(D4_H2Kb, aes(x=D4_WES_DNA_vaf, y=RNA_avgVAF, color=strength, size=D4_txn_
   labs(title="D4 H-2-Kb VAF of Predicted Neoantigen DNA & RNA", x="WES VAF", y = "RNA VAF")
 
 
+############################## new anaysis ideas ##############################
+A223_H2Kb <- read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/A223/A223_H2Kb_final_neoantigen_candidates.txt", sep = "\t")
+C12_H2Kb <- read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/C12/C12_H2Kb_final_neoantigen_candidates.txt", sep = "\t")
+H10_H2Kb <- read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/H10/H10_H2Kb_final_neoantigen_candidates.txt", sep = "\t")
+D4_H2Kb <- read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/data_merge/D4/D4_H2Kb_final_neoantigen_candidates.txt", sep = "\t")
+
+
+
+# H-2-Db
 # get intersection of all and vaf
-inAllSamples <- Reduce(intersect, list(A223_H2Db$uniqueID, C12_H2Db$uniqueID, D4_H2Db$uniqueID, H10_H2Db$uniqueID))
-A223_h2db_intersect <- A223_H2Db[which(inAllSamples %in% A223_H2Db$uniqueID),c("A223_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
-C12_h2db_intersect <- C12_H2Db[which(inAllSamples %in% C12_H2Db$uniqueID),c("C12_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
-H10_h2db_intersect <- H10_H2Db[which(inAllSamples %in% H10_H2Db$uniqueID),c("H10_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
-D4_h2db_intersect <- D4_H2Db[which(inAllSamples %in% D4_H2Db$uniqueID),c("D4_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# inAllSamples <- Reduce(intersect, list(A223_H2Db$uniqueID, C12_H2Db$uniqueID, D4_H2Db$uniqueID, H10_H2Db$uniqueID))
+A223_h2db_intersect<-A223_H2Db[which(A223_H2Db$strength == "none->strong"),c("A223_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+C12_h2db_intersect<-C12_H2Db[which(C12_H2Db$strength == "none->strong"),c("C12_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+H10_h2db_intersect <- H10_H2Db[which(H10_H2Db$strength == "none->strong"),c("H10_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+D4_h2db_intersectV<- D4_H2Db[which(D4_H2Db$strength == "none->strong"),c("D4_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# 
+# A223_h2db_intersect <- A223_H2Db[which(inAllSamples %in% A223_H2Db$uniqueID),c("A223_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# C12_h2db_intersect <- C12_H2Db[which(inAllSamples %in% C12_H2Db$uniqueID),c("C12_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# H10_h2db_intersect <- H10_H2Db[which(inAllSamples %in% H10_H2Db$uniqueID),c("H10_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# D4_h2db_intersect <- D4_H2Db[which(inAllSamples %in% D4_H2Db$uniqueID),c("D4_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
 
 
 names(A223_h2db_intersect)[1] <- 'WES_DNA_vaf'
@@ -545,6 +559,7 @@ library(wesanderson)
 grouped <- rbind(A223_h2db_intersect, C12_h2db_intersect, H10_h2db_intersect, D4_h2db_intersect)
 grouped$uniqueID <- as.character(grouped$uniqueID)
 strong <- grouped[which(grouped$strength == "none->strong"),]
+myPlots <- list()
 for (peptide in unique(strong$uniqueID)) {
   tmp <- strong[which(strong$uniqueID == peptide),]
   tmp1<-tmp[,c("RNA_avgVAF", "sample", "uniqueID", "gene")]
@@ -554,9 +569,12 @@ for (peptide in unique(strong$uniqueID)) {
   names(tmp1)[1] <- "VAF"
   names(tmp2)[1] <- "VAF"
   tmp<-rbind(tmp1, tmp2)
-  print(ggplot(tmp, aes(fill=sample, y=VAF, x=biotype)) + geom_bar(position="dodge", stat="identity") + scale_fill_manual(values=wes_palette(n=4, name="Darjeeling2")) + 
-          labs(title = paste(tmp$uniqueID)) + theme(plot.title = element_text(hjust = 0.5)))
+  p1 <- ggplot(tmp, aes(fill=sample, y=VAF, x=biotype)) + geom_bar(position="dodge", stat="identity") + scale_fill_manual(values=wes_palette(n=4, name="Darjeeling2")) + 
+          labs(title = paste(tmp$gene[1],":", " ",tmp$uniqueID[1], sep="")) + theme(plot.title = element_text(hjust = 0.5))
+  myPlots[[peptide]] <- p1
 }
+
+do.call(grid.arrange, c(myPlots, nrow = 4))
 # par(mfrow = c(5, 5))
 # #listOfGraphs <- list()
 # chr1<-grouped[which(startsWith(grouped$uniqueID, "1_")),]
@@ -567,3 +585,161 @@ for (peptide in unique(strong$uniqueID)) {
 # }
 # do.call(grid.arrange, c(listOfGraphs, nrow = 5))
 
+
+# H-2-Kb
+# get intersection of all and vaf
+# inAllSamples <- Reduce(intersect, list(A223_H2Kb$uniqueID, C12_H2Kb$uniqueID, D4_H2Kb$uniqueID, H10_H2Kb$uniqueID))
+A223_h2Kb_intersect<-A223_H2Kb[which(A223_H2Kb$strength == "none->strong"),c("A223_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+C12_h2Kb_intersect<-C12_H2Kb[which(C12_H2Kb$strength == "none->strong"),c("C12_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+H10_h2Kb_intersect <- H10_H2Kb[which(H10_H2Kb$strength == "none->strong"),c("H10_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+D4_h2Kb_intersect<- D4_H2Kb[which(D4_H2Kb$strength == "none->strong"),c("D4_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# 
+# A223_h2Kb_intersect <- A223_H2Kb[which(inAllSamples %in% A223_H2Kb$uniqueID),c("A223_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# C12_h2Kb_intersect <- C12_H2Kb[which(inAllSamples %in% C12_H2Kb$uniqueID),c("C12_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# H10_h2Kb_intersect <- H10_H2Kb[which(inAllSamples %in% H10_H2Kb$uniqueID),c("H10_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+# D4_h2Kb_intersect <- D4_H2Kb[which(inAllSamples %in% D4_H2Kb$uniqueID),c("D4_WES_DNA_vaf", "RNA_avgVAF", "sample", "strength", "uniqueID", "gene")]
+
+
+names(A223_h2Kb_intersect)[1] <- 'WES_DNA_vaf'
+names(C12_h2Kb_intersect)[1] <- 'WES_DNA_vaf'
+names(H10_h2Kb_intersect)[1] <- 'WES_DNA_vaf'
+names(D4_h2Kb_intersect)[1] <- 'WES_DNA_vaf'
+
+library(gridExtra)
+library(grid)
+library(wesanderson)
+grouped <- rbind(A223_h2Kb_intersect, C12_h2Kb_intersect, H10_h2Kb_intersect, D4_h2Kb_intersect)
+grouped$uniqueID <- as.character(grouped$uniqueID)
+strong <- grouped[which(grouped$strength == "none->strong"),]
+myPlots <- list()
+for (peptide in unique(strong$uniqueID)) {
+  tmp <- strong[which(strong$uniqueID == peptide),]
+  tmp1<-tmp[,c("RNA_avgVAF", "sample", "uniqueID", "gene")]
+  tmp1$biotype <- "RNA"
+  tmp2<-tmp[,c("WES_DNA_vaf", "sample", "uniqueID", "gene")]
+  tmp2$biotype <- "DNA"
+  names(tmp1)[1] <- "VAF"
+  names(tmp2)[1] <- "VAF"
+  tmp<-rbind(tmp1, tmp2)
+  p1 <- ggplot(tmp, aes(fill=sample, y=VAF, x=biotype)) + geom_bar(position="dodge", stat="identity") + scale_fill_manual(values=wes_palette(n=4, name="Royal1")) + 
+    labs(title = paste(tmp$gene[1],":", " ",tmp$uniqueID[1], sep="")) + theme(plot.title = element_text(hjust = 0.5))
+  myPlots[[peptide]] <- p1
+}
+
+do.call(grid.arrange, c(myPlots, nrow = 3))
+
+
+
+########## separate analysis for RNA variant calling ##########
+library(VennDiagram)
+A223_star = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/star/A223_star_vars.txt", header = F)
+A223_tophat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/tophat2/A223_tophat2_vars.txt", header = F)
+A223_hisat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/hisat2/A223_hisat_vars.txt", header = F)
+venn.diagram(x = list(A223_star$V1, A223_tophat$V1, A223_hisat$V1), 
+             category.names = c("STAR", "TopHat2", "HISAT2"), 
+             filename = "A223_RNA_variant_calling_comparison.png", 
+             imagetype = "png",
+             height = 1000,
+             width = 1000,
+             col=c("#0072b2", '#f0e442', '#cc79a7'),
+             fill = c(alpha("#0072b2",0.3), alpha('#f0e442',0.3), alpha('#cc79a7',0.3)),
+             cex = 0.4,
+             fontfamily = "sans",
+             cat.cex = 0.5,
+             cat.default.pos = "outer",
+             cat.col = c("#0072b2", '#f0e442', '#cc79a7'),
+             cat.fontfamily = "sans",
+             main = "Sample: A223 variants called",
+             main.cex = 0.5,
+             print.mode = c("raw", "percent"))
+
+
+C12_star = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/star/C12_star_vars.txt", header = F)
+C12_tophat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/tophat2/C12_tophat2_vars.txt", header = F)
+C12_hisat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/hisat2/C12_hisat_vars.txt", header = F)
+venn.diagram(x = list(C12_star$V1, C12_tophat$V1, C12_hisat$V1), 
+             category.names = c("STAR", "TopHat2", "HISAT2"), 
+             filename = "C12_RNA_variant_calling_comparison.png", 
+             imagetype = "png",
+             height = 1000,
+             width = 1000,
+             col=c("#0072b2", '#f0e442', '#cc79a7'),
+             fill = c(alpha("#0072b2",0.3), alpha('#f0e442',0.3), alpha('#cc79a7',0.3)),
+             cex = 0.4,
+             fontfamily = "sans",
+             cat.cex = 0.5,
+             cat.default.pos = "outer",
+             cat.col = c("#0072b2", '#f0e442', '#cc79a7'),
+             cat.fontfamily = "sans",
+             main = "Sample: C12 variants called",
+             main.cex = 0.5,
+             print.mode = c("raw", "percent"))
+
+
+D4_star = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/star/D4_star_vars.txt", header = F)
+D4_tophat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/tophat2/D4_tophat2_vars.txt", header = F)
+D4_hisat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/hisat2/D4_hisat_vars.txt", header = F)
+venn.diagram(x = list(D4_star$V1, D4_tophat$V1, D4_hisat$V1), 
+             category.names = c("STAR", "TopHat2", "HISAT2"), 
+             filename = "D4_RNA_variant_calling_comparison.png", 
+             imagetype = "png",
+             height = 1000,
+             width = 1000,
+             col=c("#0072b2", '#f0e442', '#cc79a7'),
+             fill = c(alpha("#0072b2",0.3), alpha('#f0e442',0.3), alpha('#cc79a7',0.3)),
+             cex = 0.4,
+             fontfamily = "sans",
+             cat.cex = 0.5,
+             cat.default.pos = "outer",
+             cat.col = c("#0072b2", '#f0e442', '#cc79a7'),
+             cat.fontfamily = "sans",
+             main = "Sample: D4 variants called",
+             main.cex = 0.5,
+             print.mode = c("raw", "percent"))
+
+
+H10_star = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/star/H10_star_vars.txt", header = F)
+H10_tophat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/tophat2/H10_tophat2_vars.txt", header = F)
+H10_hisat = read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/STEP8_independent_filtered_variant_calling/hisat2/H10_hisat_vars.txt", header = F)
+venn.diagram(x = list(H10_star$V1, H10_tophat$V1, H10_hisat$V1), 
+             category.names = c("STAR", "TopHat2", "HISAT2"), 
+             filename = "H10_RNA_variant_calling_comparison.png", 
+             imagetype = "png",
+             height = 1000,
+             width = 1000,
+             col=c("#0072b2", '#f0e442', '#cc79a7'),
+             fill = c(alpha("#0072b2",0.3), alpha('#f0e442',0.3), alpha('#cc79a7',0.3)),
+             cex = 0.4,
+             fontfamily = "sans",
+             cat.cex = 0.5,
+             cat.default.pos = "outer",
+             cat.col = c("#0072b2", '#f0e442', '#cc79a7'),
+             cat.fontfamily = "sans",
+             main = "Sample: H10 variants called",
+             main.cex = 0.5,
+             print.mode = c("raw", "percent"))
+
+overall <- read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/RNA_alignment_metrics.csv")
+ggplot(overall, aes(fill=Sample, y=Overall_Alignment, x=Aligner)) + geom_bar(position="dodge", stat="identity") + scale_fill_manual(values=wes_palette(n=4, name="Royal2")) +
+  geom_text(position = position_dodge2(width = 1, preserve = "single"), aes(y=Overall_Alignment+1, label=Overall_Alignment, hjust=0.5), angle=0) +
+  theme(axis.text.x = element_text(face="bold", size=14), axis.text.y = element_text(face="bold", size=14))  
+
+picard <- read.csv("~/projects/JingRachel_WES_and_RNAseq_variantCalling_11122020/RNA/picard_RNA_alignment_metrics.csv")
+
+ggplot(picard, aes(y = ALIGNER, x = PCT_R1_TRANSCRIPT_STRAND_READS, label = PCT_R1_TRANSCRIPT_STRAND_READS, fill = SAMPLE, colour = SAMPLE)) +
+  geom_segment(aes(x = 0, y = ALIGNER, xend =  PCT_R1_TRANSCRIPT_STRAND_READS, yend = ALIGNER), color = "grey50", size = 0.75) +
+  geom_point(size = 3) +
+  facet_wrap(~SAMPLE) + theme(axis.text.x = element_text(face="bold", size=14), axis.text.y = element_text(face="bold", size=14))
+
+
+ggplot(picard, aes(y = ALIGNER, x = PCT_R2_TRANSCRIPT_STRAND_READS, label = PCT_R2_TRANSCRIPT_STRAND_READS, fill = SAMPLE, colour = SAMPLE)) +
+  geom_segment(aes(x = 0, y = ALIGNER, xend =  PCT_R2_TRANSCRIPT_STRAND_READS, yend = ALIGNER), color = "grey50", size = 0.75) +
+  geom_point(size = 3) +
+  facet_wrap(~SAMPLE)+ theme(axis.text.x = element_text(face="bold", size=14), axis.text.y = element_text(face="bold", size=14))
+
+ggplot(picard, aes(fill=Sample, y=Overall_Alignment, x=Aligner)) + geom_bar(position="dodge", stat="identity") + scale_fill_manual(values=wes_palette(n=4, name="Royal2")) +
+  geom_text(position = position_dodge2(width = 1, preserve = "single"), aes(y=Overall_Alignment+1, label=Overall_Alignment, hjust=0.5), angle=0)
+
+ggplot(picard, aes(x=SAMPLE, y=PCT_MRNA_BASES, fill=SAMPLE)) + geom_boxplot() + theme(axis.text.x = element_text(face="bold", size=14), axis.text.y = element_text(face="bold", size=14))
+
+ggplot(picard, aes(x=SAMPLE, y=PCT_RIBOSOMAL_BASES, fill=SAMPLE)) + geom_boxplot() + theme(axis.text.x = element_text(face="bold", size=14), axis.text.y = element_text(face="bold", size=14))

@@ -3,6 +3,7 @@ import os
 sys.path.append(os.getcwd())
 from typing import *
 from Codon import *
+from NucleicAcids import *
 
 def generate_codon_reference() -> Dict[str, Codon]:
     # generate amino acid library
@@ -75,3 +76,17 @@ def generate_codon_reference() -> Dict[str, Codon]:
     codon_library['GGG'] = Codon(fullname = 'Glycine', shortname = 'Gly', symbol = 'G', hydropathy = 'neutral', chemical_class = 'aliphatic', charge = 'uncharged', hydrogen_donor_status = 'none', polarity = 'nonpolar')
     
     return codon_library
+
+def generate_fasta_sequences(fasta_file : str) -> Dict[str, Dna]:
+    dna_fasta = {}
+    
+    with open(fasta_file, 'r') as reference:
+        chromosome = ''
+        for line in reference:
+            if line.startswith('>'):
+                chromosome = line.split()[0][1:]
+                dna_fasta[chromosome] = ''
+            else:
+                dna_fasta[chromosome] = dna_fasta[chromosome] + line.strip().upper()
+    
+    return dna_fasta

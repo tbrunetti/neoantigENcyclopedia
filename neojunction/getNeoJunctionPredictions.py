@@ -95,7 +95,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     #       if concordant then continue
     # TO DO: extract genomic sequence after getting all ORFs (3) and windows and convert to Dna()
     # TO DO: once extracted and once strand is determined then check strand:
-    #       if strand is (-), then reverse compliment the extracted fasta sequence
+    #       if strand is (-), then reverse complement the extracted fasta sequence
     #       if strand is (+), nothing needs to be done
     
     
