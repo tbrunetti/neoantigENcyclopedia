@@ -3,20 +3,52 @@ import pandas
 import argparse
 import sys
 import os
-sys.path.append(os.getcwd())
+sys.path.append(os.path.join(os.getcwd(), '..', 'modules'))
 from NucleicAcids import *
 from Codon import *
 from funcsForRefs import *
 from typing import *
 
 
-def calculate_orfs():
+def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, strand : str, chrom : str, flank_left_start: int, flank_left_end: int, flank_right_start: int, flank_right_end : int, ase_start : int, ase_end : int):
     '''
     input:
     description:
     return:
     '''
-    pass
+    # TO DO: Find full length sequence to get all kmers and all ORFs
+    orf_1_start = ase_start - ((kmer_length - 1) * 3)  # 1st base of ase = first base in codon
+    orf_2_start = ase_start - ((kmer_length - 1) * 3) - 1  # 1st base of ase = second base in codon
+    orf_3_start = ase_start - ((kmer_length - 1) * 3) - 2 # 1st base of ase = last base in codon
+    
+    # confirmed these values
+    # get orf ending based on if ase region is a multiple of 3 bases or not
+    if ((ase_end - ase_start) + 1) % 3 == 0:
+        orf_1_end = ase_end + ((kmer_length - 1) * 3)
+        orf_2_end = ase_end + ((kmer_length - 1) * 3) + 1
+        orf_3_end = ase_end + ((kmer_length - 1) * 3) + 2
+    elif ((ase_end - ase_start) + 1) % 3 == 1:
+        orf_1_end = ase_end + ((kmer_length - 1) * 3) + 2
+        orf_2_end = ase_end + ((kmer_length - 1) * 3) 
+        orf_3_end = ase_end + ((kmer_length - 1) * 3) + 1
+    elif ((ase_end - ase_start) + 1) % 3 == 2:
+        orf_1_end = ase_end + ((kmer_length - 1) * 3) + 1
+        orf_2_end = ase_end + ((kmer_length - 1) * 3) + 2
+        orf_3_end = ase_end + ((kmer_length - 1) * 3)         
+    
+   
+    # TO DO: extract genomic sequence after getting all ORFs (3) and windows and convert to Dna() -- python Seq is 0-indexed, genomic coords are 1-indexed
+    orf_1_region = Dna(fasta[chrom].seq[orf_1_start - 1 : orf_1_end + 1])
+    orf_2_region = Dna(fasta[chrom].seq[orf_2_start - 1 : orf_2_end + 1])
+    orf_3_region = Dna(fasta[chrom].seq[orf_3_start - 1 : orf_3_end + 1])
+    
+    # TO DO: once extracted and once strand is determined then check strand:
+    # if strand is (-), then reverse complement the extracted fasta sequence
+    # if strand is (+), nothing needs to be done
+    if strand == '-':
+        orf_1_region = Dna(orf_1_region.reverse_complement())
+        orf_2_region = Dna(orf_2_region.reverse_complement())
+        orf_3_region = Dna(orf_3_region.reverse_complement())
 
 
 def combine_data(junctionFiles : list) -> pandas.DataFrame:
@@ -49,7 +81,7 @@ def combine_data(junctionFiles : list) -> pandas.DataFrame:
 
 
 
-def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilter : bool, diff_exp : str, pval_adj = float, outdir = str):
+def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilter : bool, diff_exp : str, pval_adj = float, outdir = str) -> None:
     '''
     input:
     description:
@@ -81,7 +113,14 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
         de_results = pandas.read_csv(diff_exp, sep = '\t')
         significant = de_results.loc[de_results['p_val_adj'] < 0.05]
         events_of_interest = significant.merge(filtered_junctions, on = 'event_id', how = 'inner')
-        # TO DO: confirm gene and gene_name are the same
+        # confirm gene names and ID match between two dataframes
+        if events_of_interest['gene'] == events_of_interest['gene_name']:
+            print('CONFIRMED -- all gene names match')
+        else:
+            # if gene and gene_name are not the same error is raised with list of mismatches
+            mismatches = list(events_of_interest['event_id'].loc[events_of_interest['gene'] != events_of_interest['gene_name']])
+            raise ValueError('FAILED! Dataframe merge has gene mismatches between spladder input and STAR junctions. \
+                             Check the following event ids: {}'.format(','.join(mismatches)))
     else:
         events_of_interest = filtered_junctions
     
@@ -93,10 +132,16 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     #       if not concordant, check if strandSTAR is ud
     #            if ud, then use strand
     #       if concordant then continue
-    # TO DO: extract genomic sequence after getting all ORFs (3) and windows and convert to Dna()
-    # TO DO: once extracted and once strand is determined then check strand:
-    #       if strand is (-), then reverse complement the extracted fasta sequence
-    #       if strand is (+), nothing needs to be done
+    for idx,row in events_of_interest.iterrows():
+        if ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] == 'ud')):
+            calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strand'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            
+        elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
+            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR'] + row['strand']))
+        
+        elif (row['strandSTAR'] == row['strand']):
+            calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+
     
     
     
@@ -163,9 +208,13 @@ if __name__ == '__main__':
     parser.add_argument('--novel', action = 'store_true', type = bool, help = 'when this flag is specifided, it means to only return results where the splice junction is novel/unannotated \
                         otherwise, the default action is to return all alternative splice events')
     parser.add_argument('--fasta', type = str, help = 'fasta file of the version of the genome used to align and detect splice variants')
+    parser.add_argument('--kmer', type = int, help = 'kmers legnth to build peptide windows')
+    parser.add_argument('--eventType', type = str, help= 'type of alternative splice event to analyze', choices = ['intron_retention', 'exon_skip', 'three_prime_alt', 'five_prime_alt', 'mutex'])
     args = parser.parse_args()
     
     codon_library = generate_codon_reference()    
     dna_fasta = SeqIO.index(args.fasta, 'fasta')
     junctions = combine_data(junctionFiles = args.SJfiles)
-    intron_retention(junctions = junctions, spladderOut = args.ase, annotFilter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj, outdir = args.outdir)
+    
+    if args.eventType == 'intron_retention':
+        intron_retention(junctions = junctions, spladderOut = args.ase, annotFilter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj, outdir = args.outdir)
