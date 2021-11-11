@@ -10,37 +10,63 @@ from funcsForRefs import *
 from typing import *
 
 
-def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, strand : str, chrom : str, flank_left_start: int, flank_left_end: int, flank_right_start: int, flank_right_end : int, ase_start : int, ase_end : int):
+def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, strand : str, chrom : str, flank_left_start: int, flank_left_end: int, flank_right_start: int, flank_right_end : int, ase_start : int, ase_end : int) -> list[Dna]:
     '''
     input:
     description:
     return:
     '''
+    
+    def extract_continuity_regions() -> Tuple[list[int], Dna]:
+        # create a new DNA that extracts and merges the continuous ORF regions into a new DNA sequence from genomic fasta
+        left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end + 1])
+        event = Dna(fasta[chrom].seq[ase_start - 1 : ase_end + 1])
+        right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end + 1])
+
+        # index where the start of the event and end of the event  occurs
+        event_index = [len(left.sequence), len(left.sequence + event.sequence)-1]
+
+        return  event_index, Dna(left.sequence + event.sequence + right.sequence)
+   
+   
     # TO DO: Find full length sequence to get all kmers and all ORFs
-    orf_1_start = ase_start - ((kmer_length - 1) * 3)  # 1st base of ase = first base in codon
-    orf_2_start = ase_start - ((kmer_length - 1) * 3) - 1  # 1st base of ase = second base in codon
-    orf_3_start = ase_start - ((kmer_length - 1) * 3) - 2 # 1st base of ase = last base in codon
+    orf_1_start = ((kmer_length - 1) * 3)  # number of bases to append upstream if 1st base of ase = first base in codon
+    orf_2_start = ((kmer_length - 1) * 3) - 1  # number of bases to append upstream if 1st base of ase = second base in codon
+    orf_3_start = ((kmer_length - 1) * 3) - 2 # number of bases to append upstream if 1st base of ase = last base in codon
     
     # confirmed these values
-    # get orf ending based on if ase region is a multiple of 3 bases or not
+    # get orf ending based on if ase region is a multiple of 3 bases or not to append to last index of event
     if ((ase_end - ase_start) + 1) % 3 == 0:
-        orf_1_end = ase_end + ((kmer_length - 1) * 3)
-        orf_2_end = ase_end + ((kmer_length - 1) * 3) + 1
-        orf_3_end = ase_end + ((kmer_length - 1) * 3) + 2
+        print('mod_0')
+        orf_1_end = ((kmer_length - 1) * 3) 
+        orf_2_end = ((kmer_length - 1) * 3) + 1
+        orf_3_end = ((kmer_length - 1) * 3) + 2
     elif ((ase_end - ase_start) + 1) % 3 == 1:
-        orf_1_end = ase_end + ((kmer_length - 1) * 3) + 2
-        orf_2_end = ase_end + ((kmer_length - 1) * 3) 
-        orf_3_end = ase_end + ((kmer_length - 1) * 3) + 1
+        print('mod_1')
+        orf_1_end = ((kmer_length - 1) * 3) + 2
+        orf_2_end = ((kmer_length - 1) * 3) 
+        orf_3_end = ((kmer_length - 1) * 3) + 1
     elif ((ase_end - ase_start) + 1) % 3 == 2:
-        orf_1_end = ase_end + ((kmer_length - 1) * 3) + 1
-        orf_2_end = ase_end + ((kmer_length - 1) * 3) + 2
-        orf_3_end = ase_end + ((kmer_length - 1) * 3)         
+        print('mod_2')
+        orf_1_end = ((kmer_length - 1) * 3) + 1
+        orf_2_end = ((kmer_length - 1) * 3) + 2
+        orf_3_end = ((kmer_length - 1) * 3)         
+    
     
    
     # TO DO: extract genomic sequence after getting all ORFs (3) and windows and convert to Dna() -- python Seq is 0-indexed, genomic coords are 1-indexed
-    orf_1_region = Dna(fasta[chrom].seq[orf_1_start - 1 : orf_1_end + 1])
-    orf_2_region = Dna(fasta[chrom].seq[orf_2_start - 1 : orf_2_end + 1])
-    orf_3_region = Dna(fasta[chrom].seq[orf_3_start - 1 : orf_3_end + 1])
+    
+    event_index, dna_continuous_seq = extract_continuity_regions()
+    try:
+        orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start : event_index[1] + orf_1_end])
+        orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start : event_index[1] + orf_2_end])
+        orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start : event_index[1] + orf_3_end])
+    except IndexError:
+        print("kmer is out of range for the full continous region")
+    
+    #orf_1_region = Dna(fasta[chrom].sequence[orf_1_start - 1 : orf_1_end + 1])
+    #orf_2_region = Dna(fasta[chrom].sequence[orf_2_start - 1 : orf_2_end + 1])
+    #orf_3_region = Dna(fasta[chrom].sequence[orf_3_start - 1 : orf_3_end + 1])
     
     # TO DO: once extracted and once strand is determined then check strand:
     # if strand is (-), then reverse complement the extracted fasta sequence
@@ -49,7 +75,24 @@ def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, stra
         orf_1_region = Dna(orf_1_region.reverse_complement())
         orf_2_region = Dna(orf_2_region.reverse_complement())
         orf_3_region = Dna(orf_3_region.reverse_complement())
+    
+    return [orf_1_region, orf_2_region, orf_3_region]
+        
 
+
+def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[]) -> Dict[str, Dict[str, str]]:
+    rna_list = [] # a list of Rna objects
+    orf_ids = {}
+    for dna in orfs:
+        rna_list.append(dna.transcribe()) # transcribe() returns an Rna object
+        
+    for orf, rna in enumerate(rna_list):
+        print((orf, rna))
+        orf_ids['orf_{}_region'.format(orf)] = rna.sequence.translate(codon_library)
+    
+    return peptide_bank[event_id : orf_ids]
+    
+    
 
 def combine_data(junctionFiles : list) -> pandas.DataFrame:
     '''
@@ -87,6 +130,9 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     description:
     return:
     '''
+    
+    # dictionary that stores all ORF peptides for each event
+    peptides = {}
     
     # read in data from spladder and then rename columns for df merge
     as_events = pandas.read_csv(spladderOut, compression= 'gzip', sep = '\t', dtype = str)
@@ -134,17 +180,16 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     #       if concordant then continue
     for idx,row in events_of_interest.iterrows():
         if ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] == 'ud')):
-            calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strand'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
-            
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strand'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
             print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR'] + row['strand']))
         
         elif (row['strandSTAR'] == row['strand']):
-            calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
 
-    
-    
-    
+        
     # get psi info columns
     events_of_interest.filter(regex = '.psi', axis = 1)
     # get read coverage info columns
