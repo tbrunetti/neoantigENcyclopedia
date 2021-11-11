@@ -42,7 +42,7 @@ class Codon:
         self.polarity = polarity
 
 
-    def translate(self) -> str:
+    def translate_symbol(self) -> str:
         '''
         input: Codon object (self)
         description: method applied to object Codon that returns the single character amino acid symbol
