@@ -20,13 +20,14 @@ class Rna:
         
         self.sequence = sequence.upper()
         
-        def translate(self, codon_library : Dict[str, Codon]) -> str:
-            protein_seq = []
-            for codon in range(0, len(self.sequence), 3):
-                print(codon)
-                protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
-            
-            return ''.join(protein_seq)
+    
+    def translate(self, codon_library : Dict[str, Codon]) -> str:
+        protein_seq = []
+        for codon in range(0, len(self.sequence), 3):
+           print(codon)
+           protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+        
+        return ''.join(protein_seq)
         
             
 class Dna:
