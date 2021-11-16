@@ -1,3 +1,4 @@
+import Bio
 from Bio import SeqIO
 import pandas
 import argparse
@@ -37,17 +38,17 @@ def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, stra
     # confirmed these values
     # get orf ending based on if ase region is a multiple of 3 bases or not to append to last index of event
     if ((ase_end - ase_start) + 1) % 3 == 0:
-        print('mod_0')
+        print('mod_result_0')
         orf_1_end = ((kmer_length - 1) * 3) 
         orf_2_end = ((kmer_length - 1) * 3) + 1
         orf_3_end = ((kmer_length - 1) * 3) + 2
     elif ((ase_end - ase_start) + 1) % 3 == 1:
-        print('mod_1')
+        print('mod_result_1')
         orf_1_end = ((kmer_length - 1) * 3) + 2
         orf_2_end = ((kmer_length - 1) * 3) 
         orf_3_end = ((kmer_length - 1) * 3) + 1
     elif ((ase_end - ase_start) + 1) % 3 == 2:
-        print('mod_2')
+        print('mod_result_2')
         orf_1_end = ((kmer_length - 1) * 3) + 1
         orf_2_end = ((kmer_length - 1) * 3) + 2
         orf_3_end = ((kmer_length - 1) * 3)         
@@ -80,7 +81,7 @@ def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, stra
         
 
 
-def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[]) -> Dict[str, Dict[str, str]]:
+def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dict[str,str]]) -> Dict[str, Dict[str, str]]:
     rna_list = [] # a list of Rna objects
     orf_ids = {}
     for dna in orfs:
@@ -160,7 +161,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
         significant = de_results.loc[de_results['p_val_adj'] < 0.05]
         events_of_interest = significant.merge(filtered_junctions, on = 'event_id', how = 'inner')
         # confirm gene names and ID match between two dataframes
-        if events_of_interest['gene'] == events_of_interest['gene_name']:
+        if events_of_interest['gene'].equals(events_of_interest['gene_name']):
             print('CONFIRMED -- all gene names match')
         else:
             # if gene and gene_name are not the same error is raised with list of mismatches
@@ -180,16 +181,19 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     #       if concordant then continue
     for idx,row in events_of_interest.iterrows():
         if ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] == 'ud')):
-            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strand'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = 8, strand = row['strand'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
             peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
             print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR'] + row['strand']))
         
         elif (row['strandSTAR'] == row['strand']):
-            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmers, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = 8, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
             peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
 
-        
+    # TO DO: calcuate percent overlap of kmer with flanking region
+    
+    
+    
     # get psi info columns
     events_of_interest.filter(regex = '.psi', axis = 1)
     # get read coverage info columns
@@ -200,13 +204,18 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     events_of_interest.filter(regex = '^log2FC_', axis = 1)
    
 
-def exon_skip():
+def exon_skip(junctions : pandas.DataFrame, spladderOut : str, annotFilter : bool, diff_exp : str, pval_adj = float, outdir = str) -> None:
     '''
     input:
     description:
     return:
     '''
-    pass
+    # dictionary that stores all ORF peptides for each event
+    peptides = {}
+    
+    # read in data from spladder and then rename columns for df merge
+    as_events = pandas.read_csv(spladderOut, compression= 'gzip', sep = '\t', dtype = str)
+    as_events.rename({'contig':'chrom'}, axis = 'columns', inplace = True)
 
 def three_prime_alt():
     '''
