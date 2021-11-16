@@ -219,6 +219,39 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, annotFilter : boo
     # read in data from spladder and then rename columns for df merge
     as_events = pandas.read_csv(spladderOut, compression= 'gzip', sep = '\t', dtype = str)
     as_events.rename({'contig':'chrom'}, axis = 'columns', inplace = True)
+    
+    # generate columns to specify junctions between exon skips since star records intron junction not exon
+    as_events['first_intron_start'] = as_events['exon_pre_end'].astype(int) + 1
+    as_events['first_intron_end'] = as_events['exon_start'].astype(int) - 1
+    as_events['second_intron_start'] = as_events['exon_end'].astype(int) + 1
+    as_events['second_intron_end'] = as_events['exon_aft_start'].astype(int) - 1
+    
+    # merge data frame (ignore strand since some discrpenacies with undetermined in star vs determined in spladder)
+    as_events['first_intron_start'] = as_events['first_intron_start'].astype(str)
+    as_events['first_intron_end'] = as_events['first_intron_end'].astype(str)
+    as_events['second_intron_start'] = as_events['second_intron_start'].astype(str)
+    as_events['second_intron_end'] = as_events['second_intron_end'].astype(str)
+    
+    # rename to match the first intron start and end -- location of splice donor and acceptor sites
+    tmp = junctions.rename({'intron_start':'first_intron_start', 'intron_end':'first_intron_end'}, axis = 'columns')
+    info_combine = as_events.merge(tmp, how = 'left', on = ['chrom', 'first_intron_start', 'first_intron_end'])
+    # rename to match the second intron start and end 
+    tmp = junctions.rename({'intron_start':'second_intron_start', 'intron_end':'second_intron_end'}, axis = 'columns')
+    final = info_combine.merge(tmp, how = 'left', on = ['chrom', 'second_intron_start', 'second_intron_end'])
+
+    # check if should filter based on annotation of junction being novel or annotated
+    if annotFilter:
+        print('Using junctions that are considered novel for peptide generation')
+        filtered_junctions = final.loc[(final['annotStatus_x'] == 'novel') | (final['annotStatus_y'] == 'novel')]
+        filtered_junctions['event_id'] = filtered_junctions['event_id'].str.replace('.', '_')
+    else:
+        print('Using all annotations -- novel and annotated for peptide generation')
+        filtered_junctions = final
+    
+    # free up memory
+    del tmp
+    del final
+    del info_combine
 
 def three_prime_alt():
     '''
