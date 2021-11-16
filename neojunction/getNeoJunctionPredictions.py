@@ -89,9 +89,12 @@ def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dic
         
     for orf, rna in enumerate(rna_list):
         print((orf, rna))
-        orf_ids['orf_{}_region'.format(orf)] = rna.sequence.translate(codon_library)
+        print(rna.translate(codon_library))
+        orf_ids['orf_{}_region'.format(orf)] = rna.translate(codon_library)
     
-    return peptide_bank[event_id : orf_ids]
+    peptide_bank[event_id] = orf_ids
+    
+    return peptide_bank
     
     
 
@@ -181,13 +184,13 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     #       if concordant then continue
     for idx,row in events_of_interest.iterrows():
         if ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] == 'ud')):
-            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = 8, strand = row['strand'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
             peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
             print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR'] + row['strand']))
         
         elif (row['strandSTAR'] == row['strand']):
-            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = 8, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = row['exon1_start'], flank_left_end = row['exon1_end'], flank_right_start = row['exon2_start'], flank_right_end = row['exon2_end'], ase_start = row['intron_start'], ase_end = row['intron_end'])
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
             peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
 
     # TO DO: calcuate percent overlap of kmer with flanking region
