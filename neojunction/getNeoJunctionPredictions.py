@@ -221,28 +221,28 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, annotFilter : boo
     as_events.rename({'contig':'chrom'}, axis = 'columns', inplace = True)
     
     # generate columns to specify junctions between exon skips since star records intron junction not exon
-    as_events['first_intron_start'] = as_events['exon_pre_end'].astype(int) + 1
-    as_events['first_intron_end'] = as_events['exon_start'].astype(int) - 1
-    as_events['second_intron_start'] = as_events['exon_end'].astype(int) + 1
-    as_events['second_intron_end'] = as_events['exon_aft_start'].astype(int) - 1
+    as_events['pre_intron_start'] = as_events['exon_pre_end'].astype(int) + 1
+    as_events['pre_intron_end'] = as_events['exon_start'].astype(int) - 1
+    as_events['aft_intron_start'] = as_events['exon_end'].astype(int) + 1
+    as_events['aft_intron_end'] = as_events['exon_aft_start'].astype(int) - 1
     
     # merge data frame (ignore strand since some discrpenacies with undetermined in star vs determined in spladder)
-    as_events['first_intron_start'] = as_events['first_intron_start'].astype(str)
-    as_events['first_intron_end'] = as_events['first_intron_end'].astype(str)
-    as_events['second_intron_start'] = as_events['second_intron_start'].astype(str)
-    as_events['second_intron_end'] = as_events['second_intron_end'].astype(str)
+    as_events['pre_intron_start'] = as_events['pre_intron_start'].astype(str)
+    as_events['pre_intron_end'] = as_events['pre_intron_end'].astype(str)
+    as_events['aft_intron_start'] = as_events['aft_intron_start'].astype(str)
+    as_events['aft_intron_end'] = as_events['aft_intron_end'].astype(str)
     
     # rename to match the first intron start and end -- location of splice donor and acceptor sites
-    tmp = junctions.rename({'intron_start':'first_intron_start', 'intron_end':'first_intron_end'}, axis = 'columns')
-    info_combine = as_events.merge(tmp, how = 'left', on = ['chrom', 'first_intron_start', 'first_intron_end'])
+    tmp = junctions.rename({'intron_start':'pre_intron_start', 'intron_end':'pre_intron_end', 'strandSTAR':'strandSTAR_pre', 'motif':'motif_pre', 'annotStatus':'annotStatus_pre' }, axis = 'columns')
+    info_combine = as_events.merge(tmp, how = 'left', on = ['chrom', 'pre_intron_start', 'pre_intron_end'])
     # rename to match the second intron start and end 
-    tmp = junctions.rename({'intron_start':'second_intron_start', 'intron_end':'second_intron_end'}, axis = 'columns')
-    final = info_combine.merge(tmp, how = 'left', on = ['chrom', 'second_intron_start', 'second_intron_end'])
+    tmp = junctions.rename({'intron_start':'aft_intron_start', 'intron_end':'aft_intron_end', 'strandSTAR':'strandSTAR_aft', 'motif':'mofif_aft', 'annotStatus':'annotStatus_aft'}, axis = 'columns')
+    final = info_combine.merge(tmp, how = 'left', on = ['chrom', 'aft_intron_start', 'aft_intron_end'])
 
     # check if should filter based on annotation of junction being novel or annotated
     if annotFilter:
         print('Using junctions that are considered novel for peptide generation')
-        filtered_junctions = final.loc[(final['annotStatus_x'] == 'novel') | (final['annotStatus_y'] == 'novel')]
+        filtered_junctions = final.loc[(final['annotStatus_pre'] == 'novel') | (final['annotStatus_aft'] == 'novel')]
         filtered_junctions['event_id'] = filtered_junctions['event_id'].str.replace('.', '_')
     else:
         print('Using all annotations -- novel and annotated for peptide generation')
@@ -308,3 +308,6 @@ if __name__ == '__main__':
     
     if args.eventType == 'intron_retention':
         intron_retention(junctions = junctions, spladderOut = args.ase, annotFilter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj, outdir = args.outdir)
+        
+    if args.eventType == 'exon_skip':
+        exon_skip(junctions = junctions, spladderOut = args.ase, annotFilter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj, outdir = args.outdir)
