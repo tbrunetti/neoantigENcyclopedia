@@ -11,6 +11,57 @@ from funcsForRefs import *
 from typing import *
 
 
+def filtering_criteria(event_type :str, base_df : pandas.DataFrame, annot_filter : bool, diff_exp : Union[str, None], pval_adj : float)  -> pandas.DataFrame:
+    '''
+    input:
+    description:
+    return:
+    '''
+    
+    # check if using only novel junctions
+    if event_type == 'intron_retention':
+            # check if should filter based on annotation of junction being novel or annotated
+        if annot_filter:
+            print('Using junctions that are considered novel for peptide generation')
+            filtered_junctions = base_df.loc[base_df['annotStatus'] == 'novel']
+            filtered_junctions['event_id'] = filtered_junctions['e    ## not yet implemented!!vent_id'].str.replace('.', '_')
+        else:
+            print('Using all annotations -- novel and annotated for peptide generation')
+            filtered_junctions = base_df
+    
+   
+    elif event_type == 'exon_skip':
+        # check if should filter based on annotation of junction being novel or annotated
+        if annot_filter:
+            print('Using junctions that are considered novel for peptide generation')
+            filtered_junctions = base_df.loc[(base_df['annotStatus_pre'] == 'novel') | (base_df['annotStatus_aft'] == 'novel')]
+            filtered_junctions['event_id'] = filtered_junctions['event_id'].str.replace('.', '_')
+        else:
+            print('Using all annotations -- novel and annotated for peptide generation')
+            filtered_junctions = base_df
+    
+
+
+    # check if using differential ASE results
+    if diff_exp != None:
+        de_results = pandas.read_csv(diff_exp, sep = '\t')
+        significant = de_results.loc[de_results['p_val_adj'] < pval_adj]
+        events_of_interest = significant.merge(filtered_junctions, on = 'event_id', how = 'inner')
+        # confirm gene names and ID match between two dataframes
+        if events_of_interest['gene'].equals(events_of_interest['gene_name']):
+            print('CONFIRMED -- all gene names match')
+        else:
+            # if gene and gene_name are not the same error is raised with list of mismatches
+            mismatches = list(events_of_interest['event_id'].loc[events_of_interest['gene'] != events_of_interest['gene_name']])
+            raise ValueError('FAILED! Dataframe merge has gene mismatches between spladder input and STAR junctions. \
+                             Check the following event ids: {}'.format(','.join(mismatches)))
+    else:
+        events_of_interest = filtered_junctions
+    
+
+    return events_of_interest
+
+
 def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, strand : str, chrom : str, flank_left_start: int, flank_left_end: int, flank_right_start: int, flank_right_end : int, ase_start : int, ase_end : int) -> list[Dna]:
     '''
     input:
@@ -128,7 +179,7 @@ def combine_data(junctionFiles : list) -> pandas.DataFrame:
 
 
 
-def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilter : bool, diff_exp : str, pval_adj = float, outdir = str) -> None:
+def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir = str) -> None:
     '''
     input:
     description:
@@ -144,38 +195,11 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     
     # merge data frame (ignore strand since some discrpenacies with undetermined in star vs determined in spladder)
     info_combine = as_events.merge(junctions, how = 'left', on = ['chrom', 'intron_start', 'intron_end'])
-    # info_combine.to_csv("testing_introns.tsv", sep = "\t", index = False)
     
-    # check if should filter based on annotation of junction being novel or annotated
-    if annotFilter:
-        print('Using junctions that are considered novel for peptide generation')
-        filtered_junctions = info_combine.loc[info_combine['annotStatus'] == 'novel']
-        filtered_junctions['event_id'] = filtered_junctions['event_id'].str.replace('.', '_')
-    else:
-        print('Using all annotations -- novel and annotated for peptide generation')
-        filtered_junctions = info_combine
+    events_of_interest = filtering_criteria(event_type = 'intron_retention', base_df = info_combine, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
     
     # free up memory
     del info_combine
-        
-    # check if using differential ASE results
-    if diff_exp != None:
-        de_results = pandas.read_csv(diff_exp, sep = '\t')
-        significant = de_results.loc[de_results['p_val_adj'] < 0.05]
-        events_of_interest = significant.merge(filtered_junctions, on = 'event_id', how = 'inner')
-        # confirm gene names and ID match between two dataframes
-        if events_of_interest['gene'].equals(events_of_interest['gene_name']):
-            print('CONFIRMED -- all gene names match')
-        else:
-            # if gene and gene_name are not the same error is raised with list of mismatches
-            mismatches = list(events_of_interest['event_id'].loc[events_of_interest['gene'] != events_of_interest['gene_name']])
-            raise ValueError('FAILED! Dataframe merge has gene mismatches between spladder input and STAR junctions. \
-                             Check the following event ids: {}'.format(','.join(mismatches)))
-    else:
-        events_of_interest = filtered_junctions
-    
-    # free up memory
-    del filtered_junctions
     
     # TO DO: check strand
     # TO DO: check if strandSTAR and strand are concordant
@@ -202,12 +226,12 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, annotFilte
     # get read coverage info columns
     events_of_interest.filter(regex = '_cov', axis = 1)
     # get mean event count and mean gene expression columns
-    events_of_interest.filter(regex = '^mean_', axis = 1)
+    events_of_interest.filter(regex = '^mean_', axis = 1)final
     # get log2FC of differential testing in event counts and gene expression levels columns
     events_of_interest.filter(regex = '^log2FC_', axis = 1)
    
 
-def exon_skip(junctions : pandas.DataFrame, spladderOut : str, annotFilter : bool, diff_exp : str, pval_adj = float, outdir = str) -> None:
+def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir = str) -> None:
     '''
     input:
     description:
@@ -239,19 +263,13 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, annotFilter : boo
     tmp = junctions.rename({'intron_start':'aft_intron_start', 'intron_end':'aft_intron_end', 'strandSTAR':'strandSTAR_aft', 'motif':'mofif_aft', 'annotStatus':'annotStatus_aft'}, axis = 'columns')
     final = info_combine.merge(tmp, how = 'left', on = ['chrom', 'aft_intron_start', 'aft_intron_end'])
 
-    # check if should filter based on annotation of junction being novel or annotated
-    if annotFilter:
-        print('Using junctions that are considered novel for peptide generation')
-        filtered_junctions = final.loc[(final['annotStatus_pre'] == 'novel') | (final['annotStatus_aft'] == 'novel')]
-        filtered_junctions['event_id'] = filtered_junctions['event_id'].str.replace('.', '_')
-    else:
-        print('Using all annotations -- novel and annotated for peptide generation')
-        filtered_junctions = final
-    
+    events_of_interest = filtering_criteria(event_type = 'exon_skip', base_df = final, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+
     # free up memory
     del tmp
     del final
     del info_combine
+
 
 def three_prime_alt():
     '''
@@ -300,6 +318,7 @@ if __name__ == '__main__':
     parser.add_argument('--fasta', type = str, help = 'fasta file of the version of the genome used to align and detect splice variants')
     parser.add_argument('--kmer', type = int, help = 'kmers legnth to build peptide windows')
     parser.add_argument('--eventType', type = str, help= 'type of alternative splice event to analyze', choices = ['intron_retention', 'exon_skip', 'three_prime_alt', 'five_prime_alt', 'mutex'])
+    parser.add_argument('--modules', default = os.path.join(os.getcwd(), '..', 'modules'), help = "full path to the modules directory location")
     args = parser.parse_args()
     
     codon_library = generate_codon_reference()    
@@ -307,7 +326,7 @@ if __name__ == '__main__':
     junctions = combine_data(junctionFiles = args.SJfiles)
     
     if args.eventType == 'intron_retention':
-        intron_retention(junctions = junctions, spladderOut = args.ase, annotFilter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj, outdir = args.outdir)
+        intron_retention(junctions = junctions, spladderOut = args.ase, outdir = args.outdir)
         
     if args.eventType == 'exon_skip':
-        exon_skip(junctions = junctions, spladderOut = args.ase, annotFilter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj, outdir = args.outdir)
+        exon_skip(junctions = junctions, spladderOut = args.ase, outdir = args.outdir)
