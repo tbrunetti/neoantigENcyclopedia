@@ -24,7 +24,7 @@ def filtering_criteria(event_type :str, base_df : pandas.DataFrame, annot_filter
         if annot_filter:
             print('Using junctions that are considered novel for peptide generation')
             filtered_junctions = base_df.loc[base_df['annotStatus'] == 'novel']
-            filtered_junctions['event_id'] = filtered_junctions['e    ## not yet implemented!!vent_id'].str.replace('.', '_')
+            filtered_junctions['event_id'] = filtered_junctions['event_id'].str.replace('.', '_')
         else:
             print('Using all annotations -- novel and annotated for peptide generation')
             filtered_junctions = base_df
@@ -201,8 +201,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir = s
     # free up memory
     del info_combine
     
-    # TO DO: check strand
-    # TO DO: check if strandSTAR and strand are concordant
+    # check if strandSTAR and strand are concordant
     #       if not concordant, check if strandSTAR is ud
     #            if ud, then use strand
     #       if concordant then continue
@@ -226,7 +225,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir = s
     # get read coverage info columns
     events_of_interest.filter(regex = '_cov', axis = 1)
     # get mean event count and mean gene expression columns
-    events_of_interest.filter(regex = '^mean_', axis = 1)final
+    events_of_interest.filter(regex = '^mean_', axis = 1)
     # get log2FC of differential testing in event counts and gene expression levels columns
     events_of_interest.filter(regex = '^log2FC_', axis = 1)
    
@@ -269,6 +268,45 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir = str) -> 
     del tmp
     del final
     del info_combine
+    
+    # check if strandSTAR and strand are concordant
+    #       if not concordant, check if strandSTAR is ud
+    #            if ud, then use strand
+    #       if concordant then continue
+    for idx,row in events_of_interest.iterrows():
+        
+        try:
+            assert row['strandSTAR_pre'] == row['strandSTAR_aft'], 'There is a strand conflict at the following event_id: {}.  Skipping this event.'.format(row['event_id'])
+        except  AssertionError as err:
+            print(err)
+            continue
+            
+        
+        if ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR'] == 'ud')): # note it does not matter if we use strandSTAR_pre for strandStar_aft since we already checked the assertion that the STAR strands are concordant with each other
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
+            peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
+        elif ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] != 'ud')):
+            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_pre'] + row['strand']))
+        
+        
+        elif (row['strandSTAR_pre'] == row['strand']):
+            orfs = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
+            peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
+    
+   
+    # TO DO: calcuate percent overlap of kmer with flanking region
+    
+    
+    # get psi info columns
+    events_of_interest.filter(regex = '.psi', axis = 1)
+    # get read coverage info columns
+    events_of_interest.filter(regex = '_cov', axis = 1)
+    # get mean event count and mean gene expression columns
+    events_of_interest.filter(regex = '^mean_', axis = 1)
+    # get log2FC of differential testing in event counts and gene expression levels columns
+    events_of_interest.filter(regex = '^log2FC_', axis = 1)
+   
+
 
 
 def three_prime_alt():
