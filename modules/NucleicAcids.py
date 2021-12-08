@@ -21,11 +21,35 @@ class Rna:
         self.sequence = sequence.upper()
         
     
-    def translate(self, codon_library : Dict[str, Codon]) -> str:
+    def translate(self, codon_library : Dict[str, Codon], ignore_stop : bool) -> str:
+        import math
+        
+        last_loop = math.floor(len(self.sequence)/3) # ensures codon is not translated if too short
+        
         protein_seq = []
-        for codon in range(0, len(self.sequence), 3):
-           print(codon)
-           protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+        
+        if ignore_stop == True:
+            for loopId, codon in enumerate(range(0, len(self.sequence), 3)):
+                if loopId != last_loop:  # confirms this is last loop that contains a full valid codon              
+                    protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                elif loopId == last_loop:
+                    protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                    break
+
+        else:
+            for loopId, codon in enumerate(range(0, len(self.sequence), 3)):
+                if loopId != last_loop:  # confirms this is last loop that contains a full valid codon
+                    try:
+                        assert codon_library[self.sequence[codon:codon+3]].translate_symbol() != '*', "Stop codon has been reached...suspending the remainder of the translation"
+                        protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                    except AssertionError as e:
+                        print(e)
+                        protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                        break
+                
+                elif loopId == last_loop:
+                    protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                    break
         
         return ''.join(protein_seq)
         
