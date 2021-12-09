@@ -24,7 +24,7 @@ class Rna:
     def translate(self, codon_library : Dict[str, Codon], ignore_stop : bool) -> str:
         import math
         
-        last_loop = math.floor(len(self.sequence)/3) # ensures codon is not translated if too short
+        last_loop = math.floor(len(self.sequence)/3) - 1 # ensures codon is not translated if too short
         
         protein_seq = []
         
