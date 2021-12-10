@@ -84,17 +84,17 @@ def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, stra
         
         # create a new DNA that extracts and merges the continuous ORF regions into a new DNA sequence from genomic fasta
         if ase_end == None: # sometimes there will not be an end and should be translated through the whole region -- such as alt 5' and alt 3' events
-            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end + 1])
-            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end + 1])
+            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
+            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
             
             event_index = [len(left.sequence), 0] # len(left.sequence) would be the first base of the right sequence
 
             return event_index, Dna(left.sequence + right.sequence)
        
         else:
-            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end + 1])
-            event = Dna(fasta[chrom].seq[ase_start - 1 : ase_end + 1])
-            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end + 1])
+            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
+            event = Dna(fasta[chrom].seq[ase_start - 1 : ase_end])
+            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
 
         # index where the start of the event and end of the event  occurs
         event_index = [len(left.sequence), len(left.sequence + event.sequence)-1]
@@ -140,14 +140,27 @@ def calculate_orfs(fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, stra
         # means only the start or end is a constant regions and the remainder of the orf window should fully be translated through the end of the sequence
         else:
             if strand == '+':
-                orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start :])
-                orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start :])
-                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start :])
+                # if that number of bases upstream from max start is less than the kmer window calculated start, then translate the whole thing and then shift the reading frame by 1 base for each orf
+                if max(orf_1_start, orf_2_start, orf_3_start) > event_index[0]: 
+                    orf_1_region = Dna(dna_continuous_seq.sequence)
+                    orf_2_region = Dna(dna_continuous_seq.sequence[1:])
+                    orf_3_region = Dna(dna_continuous_seq.sequence[2:])
+                # otherwise, use the calculated start and go all the way through the end 
+                else:
+                    orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start :])
+                    orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start :])
+                    orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start :])
             elif strand == '-':
-                orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] + orf_1_start :])
-                orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] + orf_2_start :])
-                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] + orf_3_start :])
-            
+                # TO DO check window
+                if (max(orf_1_start, orf_2_start, orf_3_start) + event_index[0]) > len(dna_continuous_seq.sequence):
+                    orf_1_region = Dna(dna_continuous_seq.sequence)
+                    orf_2_region = Dna(dna_continuous_seq.sequence[:-1])
+                    orf_3_region = Dna(dna_continuous_seq.sequence[:-2])
+                # otherwise, use the calculated start and go all the way through the end 
+                else:
+                    orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[0] + orf_1_start])
+                    orf_2_region = Dna(dna_continuous_seq.sequence[:event_index[0] + orf_2_start])
+                    orf_3_region = Dna(dna_continuous_seq.sequence[:event_index[0] + orf_3_start])
     except IndexError:
         print("kmer is out of range for the full continuous region")
     
@@ -175,7 +188,7 @@ def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dic
         
     for orf, rna in enumerate(rna_list):
         print((orf, rna))
-        print(rna.translate(codon_library, False))
+        print(event_id, rna.translate(codon_library, False))
         orf_ids['orf_{}_region'.format(orf)] = rna.translate(codon_library, False)
     
     peptide_bank[event_id] = orf_ids
@@ -437,14 +450,14 @@ def three_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : st
     unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
     total_events = unique_events_of_interest['event_id'].value_counts()
 
+
     # check if strandSTAR and strand are concordant
     #       if alt1 and alt2 are not concordant within just star, then skip\
     #       if not concordant between star and stran, check if strandSTAR is ud
     #            if ud, then use strand
     #       if concordant then continue
-    
+
     for idx,row in unique_events_of_interest.iterrows():
-        
         try:
             assert row['strandSTAR_alt1'] == row['strandSTAR_alt2'], 'There is a strand conflict at the following event_id: {}.  Skipping this event.'.format(row['event_id'])
         except  AssertionError as err:
