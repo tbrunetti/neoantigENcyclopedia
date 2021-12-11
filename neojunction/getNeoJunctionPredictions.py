@@ -557,8 +557,124 @@ def five_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str
     rev_strand_events['alt1_intron_start'] = rev_strand_events['exon_const_end'].astype(int) + 1
     rev_strand_events['alt1_intron_end'] = rev_strand_events['exon_alt1_start'].astype(int) - 1
     rev_strand_events['alt2_intron_start'] = rev_strand_events['exon_const_end'].astype(int) + 1
-    rev_strand_events['alt2_intron_end'] = rev_strand_events['exon_alt1_start'].astype(int) - 1
+    rev_strand_events['alt2_intron_end'] = rev_strand_events['exon_alt2_start'].astype(int) - 1
     
+    #dictionary specifity which columns require convert to type string to match type of star input file
+    convert_types = {'alt1_intron_start': str,
+                     'alt1_intron_end' : str,
+                     'alt2_intron_start' : str,
+                     'alt2_intron_end' : str
+                     }
+    
+    fwd_strand_events = fwd_strand_events.astype(convert_types)
+    rev_strand_events = rev_strand_events.astype(convert_types)
+    
+    # merge star intron annotation into fowrad strand events
+    fwd_tmp = junctions.rename({'intron_start':'alt1_intron_start', 'intron_end':'alt1_intron_end', 'strandSTAR':'strandSTAR_alt1', 'motif':'motif_alt1', 'annotStatus':'annotStatus_alt1' }, axis = 'columns')
+    fwd_alt1_info_combine = fwd_strand_events.merge(fwd_tmp, how = 'inner', on = ['chrom', 'alt1_intron_start', 'alt1_intron_end'])
+    
+    fwd_tmp = junctions.rename({'intron_start':'alt2_intron_start', 'intron_end':'alt2_intron_end', 'strandSTAR':'strandSTAR_alt2', 'motif':'motif_alt2', 'annotStatus':'annotStatus_alt2' }, axis = 'columns')
+    fwd_final = fwd_alt1_info_combine.merge(fwd_tmp, how = 'left', on = ['chrom', 'alt2_intron_start', 'alt2_intron_end'])
+
+      
+    # merge star intron annotation into reverse strand events
+    rev_tmp = junctions.rename({'intron_start':'alt1_intron_start', 'intron_end':'alt1_intron_end', 'strandSTAR':'strandSTAR_alt1', 'motif':'motif_alt1', 'annotStatus':'annotStatus_alt1' }, axis = 'columns')
+    rev_alt1_info_combine = rev_strand_events.merge(rev_tmp, how = 'left', on = ['chrom', 'alt1_intron_start', 'alt1_intron_end'])
+
+    rev_tmp = junctions.rename({'intron_start':'alt2_intron_start', 'intron_end':'alt2_intron_end', 'strandSTAR':'strandSTAR_alt2', 'motif':'motif_alt2', 'annotStatus':'annotStatus_alt2' }, axis = 'columns')
+    rev_final = rev_alt1_info_combine.merge(rev_tmp, how = 'left', on = ['chrom', 'alt2_intron_start', 'alt2_intron_end'])
+    
+    # merge dataframes back together
+    combined_strand_events = pandas.concat([fwd_final, rev_final], axis = 0, ignore_index= True)
+    
+    # free memory
+    del fwd_tmp, fwd_alt1_info_combine, rev_tmp, rev_alt1_info_combine, fwd_final, rev_final
+    gc.collect()
+    
+    # apply data filtering criteria
+    events_of_interest = filtering_criteria(event_type = 'three_prime_alt', base_df = combined_strand_events, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+
+    # only get unique event ids.-- drop all duplicated event ids and store counts of duplication in df for later annotation as warning for false positive of novel junction
+    unique_events_of_interest = events_of_interest.drop(['annotStatus_alt1', 'annotStatus_alt2'], axis=1)
+    unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
+    total_events = unique_events_of_interest['event_id'].value_counts()
+    
+    # check if strandSTAR and strand are concordant
+    #       if alt1 and alt2 are not concordant within just star, then skip\
+    #       if not concordant between star and stran, check if strandSTAR is ud
+    #            if ud, then use strand
+    #       if concordant then continue
+
+    for idx,row in unique_events_of_interest.iterrows():
+        try:
+            assert row['strandSTAR_alt1'] == row['strandSTAR_alt2'], 'There is a strand conflict at the following event_id: {}.  Skipping this event.'.format(row['event_id'])
+        except  AssertionError as err:
+            print(err)
+            continue
+            
+        # check strand for alt events since genomic positions are in reverse order for this alternative splicing event type
+        
+        if ((row['strandSTAR_alt1'] != row['strand']) & (row['strandSTAR_alt1'] == 'ud')): # note it does not matter if we use strandSTAR_pre for strandStar_aft since we already checked the assertion that the STAR strands are concordant with each other
+            if row['strand'] == '+':
+                orfs_alt1 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_alt1_start']), flank_left_end = int(row['exon_alt1_end']), flank_right_start = int(row['exon_const_start']), flank_right_end = int(row['exon_const_end']), ase_start = int(row['exon_alt1_end']), ase_end = None)
+                peptides_alt1 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt1, peptide_bank = peptides_alt1)
+                del orfs_alt1
+                gc.collect()
+                orfs_alt2 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_alt2_start']), flank_left_end = int(row['exon_alt2_end']), flank_right_start = int(row['exon_const_start']), flank_right_end = int(row['exon_const_end']), ase_start = int(row['exon_alt2_end']), ase_end = None)
+                peptides_alt2 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt2, peptide_bank = peptides_alt2)
+                del orfs_alt2
+                gc.collect()                
+            
+            elif row['strand'] =='-':
+                orfs_alt1 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_const_start']), flank_left_end = int(row['exon_const_end']), flank_right_start = int(row['exon_alt1_start']), flank_right_end = int(row['exon_alt1_end']), ase_start = int(row['exon_alt1_start']), ase_end = None)
+                peptides_alt1 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt1, peptide_bank = peptides_alt1)
+                del orfs_alt1
+                gc.collect()
+                orfs_alt2 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_const_start']), flank_left_end = int(row['exon_const_end']), flank_right_start = int(row['exon_alt2_start']), flank_right_end = int(row['exon_alt2_end']), ase_start = int(row['exon_alt2_start']), ase_end = None)
+                peptides_alt2 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt2, peptide_bank = peptides_alt2)
+                del orfs_alt2
+                gc.collect()
+
+
+
+        elif ((row['strandSTAR_alt1'] != row['strand']) & (row['strandSTAR_alt1'] != 'ud')):
+            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_alt1'] + row['strand']))
+        
+        
+        elif (row['strandSTAR_alt1'] == row['strand']):
+            
+            if row['strand'] == '+':
+                orfs_alt1 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR_alt1'], chrom = row['chrom'], flank_left_start = int(row['exon_alt1_start']), flank_left_end = int(row['exon_alt1_end']), flank_right_start = int(row['exon_const_start']), flank_right_end = int(row['exon_const_end']), ase_start = int(row['exon_alt1_end']), ase_end = None)
+                peptides_alt1 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt1, peptide_bank = peptides_alt1)
+                del orfs_alt1
+                gc.collect()
+                orfs_alt2 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR_alt2'], chrom = row['chrom'], flank_left_start = int(row['exon_alt2_start']), flank_left_end = int(row['exon_alt2_end']), flank_right_start = int(row['exon_const_start']), flank_right_end = int(row['exon_const_end']), ase_start = int(row['exon_alt2_end']), ase_end = None)
+                peptides_alt2 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt2, peptide_bank = peptides_alt2)
+                del orfs_alt2
+                gc.collect()
+    
+            elif row['strand'] =='-':
+                orfs_alt1 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR_alt1'], chrom = row['chrom'], flank_left_start = int(row['exon_const_start']), flank_left_end = int(row['exon_const_end']), flank_right_start = int(row['exon_alt1_start']), flank_right_end = int(row['exon_alt1_end']), ase_start = int(row['exon_alt1_start']), ase_end = None)
+                peptides_alt1 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt1, peptide_bank = peptides_alt1)
+                del orfs_alt1
+                gc.collect()
+                orfs_alt2 = calculate_orfs(fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR_alt2'], chrom = row['chrom'], flank_left_start = int(row['exon_const_start']), flank_left_end = int(row['exon_const_end']), flank_right_start = int(row['exon_alt2_start']), flank_right_end = int(row['exon_alt2_end']), ase_start = int(row['exon_alt2_start']), ase_end = None)
+                peptides_alt2 = translate_orfs(event_id = row['event_id'], orfs =  orfs_alt2, peptide_bank = peptides_alt2)
+                del orfs_alt2
+                gc.collect()
+    
+    
+    # TO DO: calcuate percent overlap of kmer with flanking region
+    
+    # get psi info columns
+    unique_events_of_interest.filter(regex = '.psi', axis = 1)
+    # get read coverage info columns
+    unique_events_of_interest.filter(regex = '_cov', axis = 1)
+    # get mean event count and mean gene expression columns
+    unique_events_of_interest.filter(regex = '^mean_', axis = 1)
+    # get log2FC of differential testing in event counts and gene expression levels columns
+    unique_events_of_interest.filter(regex = '^log2FC_', axis = 1)
+
     
 
 def mutex():
