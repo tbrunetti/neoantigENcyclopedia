@@ -1,0 +1,10 @@
+# Download protein fasta for mouse from UniProt
+https://www.uniprot.org/proteomes/UP000000589
+
+
+# make custom protein blast database for mouse
+./makeblastdb -in UP000000589_10090.fasta -parse_seqids -blastdb_version 5 -title "C57BL_6J GCA_000001635.8" -dbtype prot
+
+
+# blast your sequences
+./blastp -query test_proteins.fa -db UP000000589
