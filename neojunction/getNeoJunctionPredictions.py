@@ -138,12 +138,45 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
     event_index, dna_continuous_seq = extract_continuity_regions()
     
     try:
-        # means that ase event is located between two constant regions
+        # means that ase event is located between two constant regions (i.e. intron retention and mutex)
         if ase_end != None: 
-            orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start : event_index[1] + orf_1_end])
-            orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start : event_index[1] + orf_2_end])
-            orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start : event_index[1] + orf_3_end])
-        # means only the start or end is a constant regions and the remainder of the orf window should fully be translated through the end of the sequence
+            # if upstream and downstream exon is smaller than kmer window take full region (+ strand)
+            if (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
+                orf_1_region = Dna(dna_continuous_seq.sequence)
+                orf_2_region = Dna(dna_continuous_seq.sequence[1:])
+                orf_3_region = Dna(dna_continuous_seq.sequence[2:])
+            # if upstream and downstream exon is smaller than kmer window take full region (- strand)
+            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
+                orf_1_region = Dna(dna_continuous_seq.sequence)
+                orf_2_region = Dna(dna_continuous_seq.sequence[:-1])
+                orf_3_region = Dna(dna_continuous_seq.sequence[:-2])
+            # if left exon is smaller than kmer widown but right flank exceeds kmer window (+ strand)
+            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
+                orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[1] + orf_1_end])
+                orf_2_region = Dna(dna_continuous_seq.sequence[1:event_index[1] + orf_2_end])
+                orf_3_region = Dna(dna_continuous_seq.sequence[2:event_index[1] + orf_3_end]) 
+            # if left exon is smaller than kmer widown but right flank exceeds kmer window (- strand)
+            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
+                orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[1] + orf_1_end])
+                orf_2_region = Dna(dna_continuous_seq.sequence[1:event_index[1] + orf_2_end])
+                orf_3_region = Dna(dna_continuous_seq.sequence[2:event_index[1] + orf_3_end])                
+            # if right exon is smaller than kmer widown but left flank exceeds kmer window (+ strand)
+            elif (event_index[0] > max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
+                orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:])
+                orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:])
+                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:])
+            # if right exon is smaller than kmer widown but left flank exceeds kmer window (- strand)
+            elif (event_index[0] > max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
+                orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:])
+                orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:-1])
+                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:-2])
+            # means both flanking exon exceed kmer windows
+            else: 
+                orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:event_index[1] + orf_1_end])
+                orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:event_index[1] + orf_2_end])
+                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:event_index[1] + orf_3_end])                      
+
+        # means only the start or end is a constant regions and the remainder of the orf window should fully be translated through the end of the sequence (ex: alt 3', alt 5')
         else:
             if ((strand == '+') & (event_type == 'three_prime_alt')):
                 # if that number of bases upstream from max start is less than the kmer window calculated start, then translate the whole thing and then shift the reading frame by 1 base for each orf
@@ -304,8 +337,15 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
             peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
             
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
-            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR'] + row['strand']))
-        
+            try:
+                print(args.testMode)
+                if args.testMode: # forces the translation despite mismatch or NaN and use spladder's strand since just for testing mode
+                    orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
+                    peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
+            except:
+                print('star strand is {} and spladder strands is {}.  Skipping event.'.format(str(row['strandSTAR']), row['strand']))
+                continue
+            
         elif (row['strandSTAR'] == row['strand']):
             orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
             peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
@@ -382,17 +422,19 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
         except  AssertionError as err:
             print(err)
             continue
-            
+        
+        # args.kmer has one subtracted since the ase event is built into the upsteam and downstream contant exons    
         
         if ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] == 'ud')): # note it does not matter if we use strandSTAR_pre for strandStar_aft since we already checked the assertion that the STAR strands are concordant with each other
-            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
+            #orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
+            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
             peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
         elif ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] != 'ud')):
-            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_pre'] + row['strand']))
+            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_pre'], row['strand']))
         
         
         elif (row['strandSTAR_pre'] == row['strand']):
-            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
+            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
             peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
         
         del orfs
@@ -527,7 +569,7 @@ def three_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : st
 
 
         elif ((row['strandSTAR_alt1'] != row['strand']) & (row['strandSTAR_alt1'] != 'ud')):
-            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_alt1'] + row['strand']))
+            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_alt1'], row['strand']))
         
         
         elif (row['strandSTAR_alt1'] == row['strand']):
@@ -675,7 +717,7 @@ def five_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str
 
 
         elif ((row['strandSTAR_alt1'] != row['strand']) & (row['strandSTAR_alt1'] != 'ud')):
-            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_alt1'] + row['strand']))
+            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_alt1'], row['strand']))
         
         
         elif (row['strandSTAR_alt1'] == row['strand']):
@@ -753,6 +795,8 @@ if __name__ == '__main__':
     parser.add_argument('--kmer', type = int, help = 'kmers legnth to build peptide windows')
     parser.add_argument('--eventType', type = str, help= 'type of alternative splice event to analyze', choices = ['intron_retention', 'exon_skip', 'three_prime_alt', 'five_prime_alt', 'mutex'])
     parser.add_argument('--modules', default = os.path.join(os.getcwd(), '..', 'modules'), help = "full path to the modules directory location")
+    parser.add_argument('--testMode', action = 'store_true', help = 'Ignores some of the filtering criteria so all input cases are used for testing code.')
+    
     args = parser.parse_args()
     
     codon_library = generate_codon_reference()
