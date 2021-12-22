@@ -1,0 +1,107 @@
+# these are expected results to ensure code works properly;  all sequence extraction for fasta was done with bedtools getfasta, orfs were calculated based on what code is supposed to do to shift but done by hand by moving base +1; if (-) strand the full sequence is based on + strand 5'->3' but tthe orfs and translations on based upon the reverse complement done by www.bioinformatics.org; translations were done in expasy; testing window is based on 9-mers that have at least 1 amino acid overlap with ase region
+
+* warning!! bedtools considers bedfiles as 0-indexed!  Need to substract 1 from start coordinates in order to get the correct base sequences and right base is inclusive so no need to change it
+
+
+exon_skip_267 (+ strand; [exon_pre_const_full]chr1:58445628-58445634; [exon_post_const_full]chr1:58450387-58450507)
+fullSeq:GCGACTGGAACTTGCACTACCAGGCCCATCCA
+orf_1:GCGACTGGAACTTGCACTACCAGGCCCATCCA
+orf_2:CGACTGGAACTTGCACTACCAGGCCCATCCA
+orf_3:GACTGGAACTTGCACTACCAGGCCCATCCA
+translated_1:ATGTCTTRPI
+translated_2:RLELALPGPS
+translated_3:DWNLHYQAHP
+
+[pass] translated_3 has extra peptide to right
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+exon_skip_20676 (+ strand; [exon_pre_const_full]chr17:28050566-28050664; [exon_post_const_full]chr17:28051725-28051730)
+fullSeq:GCAGGCTGCACGCTCCTTGCCCAAGGTCCTG
+orf_1:GCAGGCTGCACGCTCCTTGCCCAAGGTCCTG
+orf_2:CAGGCTGCACGCTCCTTGCCCAAGGTCCTG
+orf_3:AGGCTGCACGCTCCTTGCCCAAGGTCCTG
+translated_1:AGCTLLAQGP
+translated_2:QAARSLPKVL
+translated_3:RLHAPCPRS
+
+[pass] translated 1 has extra peptide to left
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+exon_skip_34808 (+ strand; [exon_pre_const_full]chr4:95837585-95837659; [exon_post_const_full]chr4:95922925-95922986)
+fullSeq:CCTGGCCACTGTTCAAGCCATTGCTGAGGCAATGGCAAGGATGAGCAAAG
+orf_1:CCTGGCCACTGTTCAAGCCATTGCTGAGGCAATGGCAAGGATGAGCAAAG
+orf_2:CTGGCCACTGTTCAAGCCATTGCTGAGGCAATGGCAAGGATGAGCAAAG
+orf_3:TGGCCACTGTTCAAGCCATTGCTGAGGCAATGGCAAGGATGAGCAAAG
+translated_1:PGHCSSHC-GNGKDEQ
+translated_2:LATVQAIAEAMARMSK
+translated_3:WPLFKPLLRQWQG-AK
+
+[pass] translated 1 has extra peptide prepended
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+exon_skip.16005 (+ strand; [exon_pre_const_full]chr15:8223143-8223150; [exon_post_const_full]chr15:8226913-8226919;
+fullSeq:CAGAAAGGTGCACAG
+orf_1:CAGAAAGGTGCACAG
+orf_2:AGAAAGGTGCACAG
+orf_3:GAAAGGTGCACAG
+translated_1:QKGAQ
+translated_2:RKVH
+translated_3:ERCT
+
+[pass]
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+exon_skip_47028 (- strand; [exon_pre_const_full]chr7:31036487-31036516; [exon_post_const_full]chr7:31039038-31039046)
+fullSeq:TCGATCCTGGAGACTGCAGGGGTACCTTCTCTGG
+fullSeq_revComp:CCAGAGAAGGTACCCCTGCAGTCTCCAGGATCGA
+orf_1:CCAGAGAAGGTACCCCTGCAGTCTCCAGGATCGA
+orf_2:CAGAGAAGGTACCCCTGCAGTCTCCAGGATCGA
+orf_3:AGAGAAGGTACCCCTGCAGTCTCCAGGATCGA
+translated_1:PEKVPLQSPGS
+translated_2:QRRYPCSLQDR
+translated_3:REGTPAVSRI
+
+[pass] translated 1 has extra peptide to right and translated 3 has extra peptide to right
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+exon_skip_53297 (- strand; [exon_pre_const_full]chr9:35223733-35223742; [exon_post_const_full]chr9:35235231-35235445)
+fullSeq:ACTCCAGGACAGGGGAGAGTTTCTGAATGAGGTCA
+fullSeq_revComp:TGACCTCATTCAGAAACTCTCCCCTGTCCTGGAGT
+orf_1:TGACCTCATTCAGAAACTCTCCCCTGTCCTGGAGT
+orf_2:GACCTCATTCAGAAACTCTCCCCTGTCCTGGAGT
+orf_3:ACCTCATTCAGAAACTCTCCCCTGTCCTGGAGT
+translated_1:-PHSETLPCPG
+translated_2:DLIQKLSPVLE
+translated_3:TSFRNSPLSWS
+
+[pass]
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+exon_skip_24427 (- strand; [exon_pre_const_full]chr18:77758470-77758517; [exon_post_const_full]chr18:7775943-77759508)
+fullSeq:TTTTCAGTTGAGCAAGAGATGGACTCGGCATTAAATCTAAATAGGACTCC
+fullSeq_revComp:GGAGTCCTATTTAGATTTAATGCCGAGTCCATCTCTTGCTCAACTGAAAA
+orf_1:GGAGTCCTATTTAGATTTAATGCCGAGTCCATCTCTTGCTCAACTGAAAA
+orf_2:GAGTCCTATTTAGATTTAATGCCGAGTCCATCTCTTGCTCAACTGAAAA
+orf_3:AGTCCTATTTAGATTTAATGCCGAGTCCATCTCTTGCTCAACTGAAAA
+translated_1:GVLFRFNAESISCSTE
+translated_2:ESYLDLMPSPSLAQLK
+translated_3:SPI-I-CRVHLLLN-K
+
+[pass] translated 1 and translated 2 have extra peptide to the right
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+exon_skip_15902 (- strand; [exon_pre_const_full]chr14:103262814-103262821; [exon_post_const_full]chr14:103275789-103275795)
+fullSeq:ACTTCCATCTCTTCC
+fullSeq_revComp:GGAAGAGATGGAAGT
+orf_1:GGAAGAGATGGAAGT
+orf_2:GAAGAGATGGAAGT
+orf_3:AAGAGATGGAAGT
+translated_1:GRDGS
+translated_2:EEME
+translated_3:KRWK
+
+[pass]
+
+
+
