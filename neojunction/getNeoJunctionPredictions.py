@@ -97,6 +97,18 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
             
             return event_index, Dna(left.sequence + right.sequence)
        
+        
+        elif args.eventType == 'exon_skip':
+            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
+            event_left = Dna(fasta[chrom].seq[ase_start : ase_start + 3]) # always 3 nucleotides last full codon of exon is max
+            event_right = Dna(fasta[chrom].seq[ase_end - 4 : ase_end - 1]) # always 3 nucleotides first full codon of exon is max
+            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
+
+            event_index = [len(left.sequence), len(left.sequence + event_left.sequence + event_right.sequence)-1]
+            
+            return event_index, Dna(left.sequence + event_left.sequence + event_right.sequence + right.sequence)
+
+        
         else:
             left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
             event = Dna(fasta[chrom].seq[ase_start - 1 : ase_end])
@@ -429,12 +441,19 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
             #orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
             orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
             peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
-        elif ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] != 'ud')):
-            print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_pre'], row['strand']))
         
+        elif ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] != 'ud')):
+            try:
+                print(args.testMode)
+                if args.testMode: # forces the translation despite mismatch or NaN and use spladder's strand since just for testing mode
+                    orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
+                    peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
+            except:
+                    print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_pre'], row['strand']))
+                    continue
         
         elif (row['strandSTAR_pre'] == row['strand']):
-            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
+            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strandSTAR_pre'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
             peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
         
         del orfs
@@ -570,6 +589,7 @@ def three_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : st
 
         elif ((row['strandSTAR_alt1'] != row['strand']) & (row['strandSTAR_alt1'] != 'ud')):
             print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_alt1'], row['strand']))
+            continue
         
         
         elif (row['strandSTAR_alt1'] == row['strand']):
@@ -718,6 +738,7 @@ def five_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str
 
         elif ((row['strandSTAR_alt1'] != row['strand']) & (row['strandSTAR_alt1'] != 'ud')):
             print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_alt1'], row['strand']))
+            continue
         
         
         elif (row['strandSTAR_alt1'] == row['strand']):
