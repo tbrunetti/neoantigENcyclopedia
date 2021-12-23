@@ -51,6 +51,14 @@ def filtering_criteria(event_type :str, base_df : pandas.DataFrame, annot_filter
             print('Using all annotations -- novel and annotated for peptide generation')
             filtered_junctions = base_df
     
+    elif event_type == 'mutex':
+        if annot_filter:
+            print('Using junctions that are considered novel for peptide generation')
+            filtered_junctions = base_df.loc[(base_df['annotStatus_exon1_pre'] == 'novel') | (base_df['annotStatus_exon1_aft'] == 'novel') | (base_df['annotStatus_exon2_pre'] == 'novel') | (base_df['annotStatus_exon2_aft'] == 'novel')]
+            filtered_junctions['event_id'] = filtered_junctions['event_id'].str.replace('.', '_')
+        else:
+            print('Using all annotations -- novel and annotated for peptide generation')
+            filtered_junctions = base_df
 
 
     # check if using differential ASE results
@@ -831,6 +839,54 @@ def mutex(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> None
     as_events = pandas.read_csv(spladderOut, compression= 'gzip', sep = '\t', dtype = str)
     as_events.rename({'contig':'chrom'}, axis = 'columns', inplace = True)
 
+    '''
+    TO DO:
+    columns for mutex: exon_pre_start  exon_pre_end    exon1_start     exon1_end       exon2_start     exon2_end       exon_aft_start  exon_aft_end
+    '''
+    # generate columns to specify junctions between exon skips since star records intron junction not exon
+    # pre_intron_start and aft_intron_end will always be the same regardless of exon1 or exon2 since they are constant
+    # the only change will be the pre_intron_end and aft_intron_start for each exon
+    as_events['pre_intron_start'] = as_events['exon_pre_end'].astype(int) + 1 
+    as_events['aft_intron_end'] = as_events['exon_aft_start'].astype(int) - 1
+    
+    # variable intron
+    as_events['pre_intron_end_exon1'] = as_events['exon1_start'].astype(int) - 1
+    as_events['aft_intron_start_exon1'] = as_events['exon1_end'].astype(int) + 1
+    as_events['pre_intron_end_exon2'] = as_events['exon2_start'].astype(int) - 1
+    as_events['aft_intron_start_exon2'] = as_events['exon2_end'].astype(int) + 1
+    
+    # merge data frame (ignore strand since some discrpenacies with undetermined in star vs determined in spladder)
+    as_events['pre_intron_start'] = as_events['pre_intron_start'].astype(str)
+    as_events['aft_intron_end'] = as_events['aft_intron_end'].astype(str)
+    as_events['pre_intron_end_exon1'] = as_events['pre_intron_end_exon1'].astype(str)
+    as_events['aft_intron_start_exon1'] = as_events['aft_intron_start_exon1'].astype(str)
+    as_events['pre_intron_end_exon2'] = as_events['pre_intron_end_exon2'].astype(str)
+    as_events['aft_intron_start_exon2'] = as_events['aft_intron_start_exon2'].astype(str)
+    
+    # merge star intron annotation
+    tmp = junctions.rename({'intron_start':'pre_intron_start', 'intron_end':'pre_intron_end_exon1', 'strandSTAR':'strandSTAR_exon1_pre', 'motif':'motif_exon1_pre', 'annotStatus':'annotStatus_exon1_pre' }, axis = 'columns')
+    tmp_info_combine = as_events.merge(tmp, how = 'inner', on = ['chrom', 'pre_intron_start', 'pre_intron_end_exon1'])
+    del tmp
+    tmp = junctions.rename({'intron_start':'aft_intron_start_exon1', 'intron_end':'aft_intron_end', 'strandSTAR':'strandSTAR_exon1_aft', 'motif':'motif_exon1_aft', 'annotStatus':'annotStatus_exon1_aft' }, axis = 'columns')
+    tmp_info_combine_1 = tmp_info_combine.merge(tmp, how = 'inner', on = ['chrom', 'aft_intron_start_exon1', 'aft_intron_end'])
+    del tmp
+    tmp = junctions.rename({'intron_start':'pre_intron_start', 'intron_end':'pre_intron_end_exon2', 'strandSTAR':'strandSTAR_exon2_pre', 'motif':'motif_exon2_pre', 'annotStatus':'annotStatus_exon2_pre' }, axis = 'columns')
+    tmp_info_combine = tmp_info_combine_1.merge(tmp, how = 'inner', on = ['chrom', 'pre_intron_start', 'pre_intron_end_exon2'])
+    del tmp
+    tmp = junctions.rename({'intron_start':'aft_intron_start_exon2', 'intron_end':'aft_intron_end', 'strandSTAR':'strandSTAR_exon2_aft', 'motif':'motif_exon2_aft', 'annotStatus':'annotStatus_exon2_aft' }, axis = 'columns')
+    final = tmp_info_combine.merge(tmp, how = 'inner', on = ['chrom', 'aft_intron_start_exon2', 'aft_intron_end'])
+    
+    # free memory
+    del tmp, tmp_info_combine, tmp_info_combine_1
+    gc.collect()
+    
+    # apply data filtering criteria
+    events_of_interest = filtering_criteria(event_type = 'mutex', base_df = final, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+
+    # only get unique event ids.-- drop all duplicated event ids and store counts of duplication in df for later annotation as warning for false positive of novel junction
+    #unique_events_of_interest = events_of_interest.drop(['annotStatus_alt1', 'annotStatus_alt2'], axis=1)
+    #unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
+    #total_events = unique_events_of_interest['event_id'].value_counts()
 
 def multiExon_skip():
     '''
@@ -838,8 +894,8 @@ def multiExon_skip():
     description:
     return:
     '''
+    # should be the same as exon_skip
     pass
-
 
 if __name__ == '__main__':
     
