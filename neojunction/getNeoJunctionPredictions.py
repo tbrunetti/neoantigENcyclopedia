@@ -726,7 +726,7 @@ def five_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str
     
     # check if strandSTAR and strand are concordant
     #       if alt1 and alt2 are not concordant within just star, then skip\
-    #       if not concordant between star and stran, check if strandSTAR is ud
+    #       if not concordant between star and strand, check if strandSTAR is ud
     #            if ud, then use strand
     #       if concordant then continue
 
@@ -884,9 +884,76 @@ def mutex(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> None
     events_of_interest = filtering_criteria(event_type = 'mutex', base_df = final, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
 
     # only get unique event ids.-- drop all duplicated event ids and store counts of duplication in df for later annotation as warning for false positive of novel junction
-    #unique_events_of_interest = events_of_interest.drop(['annotStatus_alt1', 'annotStatus_alt2'], axis=1)
-    #unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
+    unique_events_of_interest = events_of_interest.drop(['annotStatus_exon1_pre', 'annotStatus_exon1_aft', 'annotStatus_exon2_pre', 'annotStatus_exon2_aft'], axis=1)
+    unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
     #total_events = unique_events_of_interest['event_id'].value_counts()
+        
+    # check if strandSTAR and strand are concordant
+    #       if alt1 and alt2 are not concordant within just star, then skip\
+    #       if not concordant between star and strand, check if strandSTAR is ud
+    #            if ud, then use strand
+    #       if concordant then continue
+
+    for idx,row in unique_events_of_interest.iterrows():
+        try:
+            assert row['strandSTAR_exon1_pre'] == row['strandSTAR_exon2_pre'], 'There is a strand conflict at the following event_id: {}.  Skipping this event.'.format(row['event_id'])
+        except  AssertionError as err:
+            print(err)
+            continue
+        
+        
+        ## TO DO -- needs reworking ##
+        # args.kmer has one subtracted since the ase event is built into the upsteam and downstream contant exons    
+        
+        if ((row['strandSTAR_exon1_pre'] != row['strand']) & (row['strandSTAR_exon1_pre'] == 'ud')): # note it does not matter if we use strandSTAR_pre for strandStar_aft since we already checked the assertion that the STAR strands are concordant with each other
+            orfs_exon_1 = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon1_start']), ase_end = int(row['exon1_end']))
+            peptides_exon1 = translate_orfs(event_id = row['event_id'], orfs =  orfs_exon_1, peptide_bank = peptides_exon1)
+            del orfs_exon_1
+            gc.collect()
+            orfs_exon_2 = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon2_start']), ase_end = int(row['exon2_end']))
+            peptides_exon2 = translate_orfs(event_id = row['event_id'], orfs = orfs_exon_2, peptide_bank = peptides_exon2)
+            del orfs_exon_2
+            gc.collect()
+            
+            
+        elif ((row['strandSTAR_exon1_pre'] != row['strand']) & (row['strandSTAR_exon1_pre'] != 'ud')):
+            try:
+                if args.testMode: # forces the translation despite mismatch or NaN and use spladder's strand since just for testing mode
+                    orfs_exon_1 = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon1_start']), ase_end = int(row['exon1_end']))
+                    peptides_exon1 = translate_orfs(event_id = row['event_id'], orfs =  orfs_exon_1, peptide_bank = peptides_exon1)
+                    del orfs_exon_1
+                    gc.collect()
+                    orfs_exon_2 = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon2_start']), ase_end = int(row['exon2_end']))
+                    peptides_exon2 = translate_orfs(event_id = row['event_id'], orfs = orfs_exon_2, peptide_bank = peptides_exon2)
+                    del orfs_exon_2
+                    gc.collect()
+            except:
+                    print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_exon1_pre'], row['strand']))
+                    continue
+        
+        elif (row['strandSTAR_exon1_pre'] == row['strand']):
+            orfs_exon_1 = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR_exon1_pre'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon1_start']), ase_end = int(row['exon1_end']))
+            peptides_exon1 = translate_orfs(event_id = row['event_id'], orfs =  orfs_exon_1, peptide_bank = peptides_exon1)
+            del orfs_exon_1
+            gc.collect()
+            orfs_exon_2 = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR_exon2_pre'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon2_start']), ase_end = int(row['exon2_end']))
+            peptides_exon2 = translate_orfs(event_id = row['event_id'], orfs = orfs_exon_2, peptide_bank = peptides_exon2)
+            del orfs_exon_2
+            gc.collect()
+    
+    
+    # TO DO: calcuate percent overlap of kmer with flanking region
+    
+    
+    # get psi info columns
+    unique_events_of_interest.filter(regex = '.psi', axis = 1)
+    # get read coverage info columns
+    unique_events_of_interest.filter(regex = '_cov', axis = 1)
+    # get mean event count and mean gene expression columns
+    unique_events_of_interest.filter(regex = '^mean_', axis = 1)
+    # get log2FC of differential testing in event counts and gene expression levels columns
+    unique_events_of_interest.filter(regex = '^log2FC_', axis = 1)
+        
 
 def multiExon_skip():
     '''
