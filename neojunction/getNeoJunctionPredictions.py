@@ -232,10 +232,9 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
                     orf_3_region = Dna(dna_continuous_seq.sequence[:-2])
                 # otherwise, use the calculated start and go all the way through the end 
                 else:
-                    orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:])
-                    orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start+1:])
-                    orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start+2:])
-                    
+                    orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[0] + orf_1_start])
+                    orf_2_region = Dna(dna_continuous_seq.sequence[1:event_index[0] + orf_2_start])
+                    orf_3_region = Dna(dna_continuous_seq.sequence[2:event_index[0] + orf_3_start])
             elif ((strand == '+') & (event_type == 'five_prime_alt')):
                 # if that number of bases upstream from max start is less than the kmer window calculated start, then translate the whole thing and then shift the reading frame by 1 base for each orf
                 if max(orf_1_start, orf_2_start, orf_3_start) > event_index[1]: 
@@ -253,11 +252,7 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
 
     except IndexError:
         print("kmer is out of range for the full continuous region")
-    
-    #orf_1_region = Dna(fasta[chrom].sequence[orf_1_start - 1 : orf_1_end + 1])
-    #orf_2_region = Dna(fasta[chrom].sequence[orf_2_start - 1 : orf_2_end + 1])
-    #orf_3_region = Dna(fasta[chrom].sequence[orf_3_start - 1 : orf_3_end + 1])
-    
+        
     # TO DO: once extracted and once strand is determined then check strand:
     # if strand is (-), then reverse complement the extracted fasta sequence
     # if strand is (+), nothing needs to be done
