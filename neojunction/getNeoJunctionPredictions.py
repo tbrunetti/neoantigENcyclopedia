@@ -129,9 +129,9 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
    
    
     # TO DO: Find full length sequence to get all kmers and all ORFs
-    orf_1_start = ((kmer_length - 1) * 3)  # number of bases to append upstream if 1st base of ase = first base in codon
-    orf_2_start = ((kmer_length - 1) * 3) - 1  # number of bases to append upstream if 1st base of ase = second base in codon
-    orf_3_start = ((kmer_length - 1) * 3) - 2 # number of bases to append upstream if 1st base of ase = last base in codon
+    orf_1_start = ((kmer_length - 1) * 3) # number of bases to append upstream if 1st base of ase = first base in codon = mod0
+    orf_2_start = ((kmer_length - 1) * 3) - 1  # number of bases to append upstream if 1st base of ase = second base in codon = mod2
+    orf_3_start = ((kmer_length - 1) * 3) - 2 # number of bases to append upstream if 1st base of ase = last base in codon = mod1
     
     # confirmed these values
     # get orf ending based on if ase region is a multiple of 3 bases or not to append to last index of event
@@ -139,20 +139,22 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
         if ((ase_end - ase_start) + 1) % 3 == 0:
             print('mod_result_0')
             orf_1_end = ((kmer_length - 1) * 3) 
-            orf_2_end = ((kmer_length - 1) * 3) + 1
             orf_3_end = ((kmer_length - 1) * 3) + 2
+            orf_2_end = ((kmer_length - 1) * 3) + 1
+
         elif ((ase_end - ase_start) + 1) % 3 == 1:
             print('mod_result_1')
-            orf_1_end = ((kmer_length - 1) * 3) + 2
-            orf_2_end = ((kmer_length - 1) * 3) 
-            orf_3_end = ((kmer_length - 1) * 3) + 1
+            orf_3_end = ((kmer_length - 1) * 3) + 2
+            orf_1_end = ((kmer_length - 1) * 3) 
+            orf_2_end = ((kmer_length - 1) * 3) + 1
+           
         elif ((ase_end - ase_start) + 1) % 3 == 2:
             print('mod_result_2')
-            orf_1_end = ((kmer_length - 1) * 3) + 1
-            orf_2_end = ((kmer_length - 1) * 3) + 2
-            orf_3_end = ((kmer_length - 1) * 3)         
-    
-    
+            orf_2_end = ((kmer_length - 1) * 3) + 1
+            orf_3_end = ((kmer_length - 1) * 3) + 2
+            orf_1_end = ((kmer_length - 1) * 3)  
+         
+
    
     # TO DO: extract genomic sequence after getting all ORFs (3) and windows and convert to Dna() -- python Seq is 0-indexed, genomic coords are 1-indexed
     event_index, dna_continuous_seq = extract_continuity_regions()
@@ -161,40 +163,40 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
         # means that ase event is located between two constant regions (i.e. intron retention and mutex)
         if ase_end != None: 
             # if upstream and downstream exon is smaller than kmer window take full region (+ strand)
-            if (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
+            if (event_index[0] < max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
                 orf_1_region = Dna(dna_continuous_seq.sequence)
                 orf_2_region = Dna(dna_continuous_seq.sequence[1:])
                 orf_3_region = Dna(dna_continuous_seq.sequence[2:])
             # if upstream and downstream exon is smaller than kmer window take full region (- strand)
-            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
+            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
                 orf_1_region = Dna(dna_continuous_seq.sequence)
                 orf_2_region = Dna(dna_continuous_seq.sequence[:-1])
                 orf_3_region = Dna(dna_continuous_seq.sequence[:-2])
             # if left exon is smaller than kmer widown but right flank exceeds kmer window (+ strand)
-            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
+            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
                 orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[1] + orf_1_end])
                 orf_2_region = Dna(dna_continuous_seq.sequence[1:event_index[1] + orf_2_end])
                 orf_3_region = Dna(dna_continuous_seq.sequence[2:event_index[1] + orf_3_end]) 
             # if left exon is smaller than kmer widown but right flank exceeds kmer window (- strand)
-            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
+            elif (event_index[0] < max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
                 orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[1] + orf_1_end])
                 orf_2_region = Dna(dna_continuous_seq.sequence[1:event_index[1] + orf_2_end])
                 orf_3_region = Dna(dna_continuous_seq.sequence[2:event_index[1] + orf_3_end])                
             # if right exon is smaller than kmer widown but left flank exceeds kmer window (+ strand)
-            elif (event_index[0] > max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
+            elif (event_index[0] > max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
                 orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:])
                 orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:])
                 orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:])
             # if right exon is smaller than kmer widown but left flank exceeds kmer window (- strand)
-            elif (event_index[0] > max(orf_1_start, orf_2_start, orf_2_end)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
+            elif (event_index[0] > max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
                 orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:])
                 orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:-1])
                 orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:-2])
             # means both flanking exon exceed kmer windows
             else: 
-                orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:event_index[1] + orf_1_end])
-                orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:event_index[1] + orf_2_end])
-                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:event_index[1] + orf_3_end])                      
+                orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:event_index[1] + 1 + orf_1_end])
+                orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:event_index[1] + 1 +  orf_2_end])
+                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:event_index[1] + 1 + orf_3_end])                      
 
         # means only the start or end is a constant regions and the remainder of the orf window should fully be translated through the end of the sequence (ex: alt 3', alt 5')
         else:
