@@ -282,7 +282,7 @@ def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dic
     
     
 
-def combine_data(junctionFiles : list) -> pandas.DataFrame:
+def combine_data(junctionFiles : list, annotation : str) -> pandas.DataFrame:
     '''
     input:
     description:
@@ -290,27 +290,34 @@ def combine_data(junctionFiles : list) -> pandas.DataFrame:
     '''
     
     # read in all SJ.tab files detected by 2-pass STAR and get the columns: chrom, intron start, intron end, strand, novelty
-    junctionDFs = [pandas.read_table(inputFile, delim_whitespace = True, dtype = str, header = None, names = ['chrom', 'intron_start', 'intron_end', 'strandSTAR', 'motif', 'annotStatus'],
+    junctionDFs = [pandas.read_table(inputFile, delim_whitespace = True, dtype = str, header = None, names = ['chrom', 'intron_start', 'intron_end', 'strandSTAR', 'motif', 'twoPassAnnotStatus'],
                                      usecols=[0, 1, 2, 3, 4, 5]) for inputFile in junctionFiles]
         
     # merge all SJ.tab files after column extraction and only keep unique ones
     junctions = pandas.concat(junctionDFs, ignore_index = True)
     junctions.drop_duplicates(keep = 'last', inplace = True)
     
+    # gtf junctions
+    known_juncs = pandas.read_table(annotation, delim_whitespace = True, dtype = str, header = None, names = ['chrom', 'intron_start', 'intron_end', 'strandSTAR', 'extraInfo'])
+    known_juncs['annotStatus'] = 'annotated'
     '''
     rename columns values to be more meaningful:
         strand -> 0 = ud (undetermined), 1 = + strand, 2 = - strand
         motif -> 0 = nc (non-canonical), 1 = GT/AG, 2 = CT/AC, 3 = GC/AG, 4 = CT/GC, 5 = AT/AC, 6 = GT/AT
-        annotStatus -> 0 = unannotated/novel, 1 = annotated
+        twoPassAnnotStatus -> 0 = unannotated/novel, 1 = annotated based on 2nd pass.  Does not mean junction is novel or annotated relative to gtf
     '''
+    
     junctions.replace({'strandSTAR': {'0':'ud' , '1': '+', '2':'-'}, 
                        'motif':{'0': 'nc', '1':'GT/AG', '2':'CT/AC', '3':'GC/AG', '4':'CT/GC', '5':'AT/AC', '6':'GT/AT'},
-                       'annotStatus':{'0':'novel', '1':'annotated'}}, 
+                       'twoPassAnnotStatus':{'0':'novel', '1':'annotated'}}, 
                        inplace = True)
     
+    # merge in known gtf annotations into junctions detected by STAR across all samples
+    fully_annotated = junctions.merge(known_juncs, how = 'left', on = ['chrom', 'intron_start', 'intron_end', 'strandSTAR'])
+    fully_annotated['annotStatus'].fillna('novel', inplace=True)
+    fully_annotated.drop(['twoPassAnnotStatus', 'extraInfo'], axis=1, inplace = True)
     
-    
-    return junctions
+    return fully_annotated
 
 
 
@@ -977,12 +984,12 @@ if __name__ == '__main__':
     parser.add_argument('--eventType', type = str, help= 'type of alternative splice event to analyze', choices = ['intron_retention', 'exon_skip', 'three_prime_alt', 'five_prime_alt', 'mutex'])
     parser.add_argument('--modules', default = os.path.join(os.getcwd(), '..', 'modules'), help = "full path to the modules directory location")
     parser.add_argument('--testMode', action = 'store_true', help = 'Ignores some of the filtering criteria so all input cases are used for testing code.')
-    
+    parser.add_argument('--knownJunctions', type = str, required = True, help = 'path to sjdbList.fromGTF.out.tab generated within STARgenome directory' )
     args = parser.parse_args()
     
     codon_library = generate_codon_reference()
     dna_fasta = SeqIO.index(args.fasta, 'fasta')
-    junctions = combine_data(junctionFiles = args.SJfiles)
+    junctions = combine_data(junctionFiles = args.SJfiles, annotation = args.knownJuctions)
     
     if args.eventType == 'intron_retention':
         intron_retention(junctions = junctions, spladderOut = args.ase, outdir = args.outdir)
