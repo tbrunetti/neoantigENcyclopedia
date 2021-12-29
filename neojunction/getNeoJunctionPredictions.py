@@ -12,6 +12,47 @@ from typing import *
 import gc
 
 
+def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, chrom : str, const_region_start : int, const_region_end : int, strand : str) -> None:
+    import subprocess
+    import re
+
+    '''
+    TO DO: check if file exists to make sure to warn user it will be overwritten in even they happen to have this file in their space
+    '''
+    
+    blastFile = open('input_search.fasta', 'w')
+    
+    if strand == '+':
+        reg_1 = Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).transcribe().translate(codon_library, True)
+        reg_2 = Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).transcribe().translate(codon_library, True)
+        reg_3 = Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).transcribe().translate(codon_library, True)
+
+    elif strand == '-': # reverse complements region before translation
+        reg_1 = Dna(Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
+        reg_2 = Dna(Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
+        reg_3 = Dna(Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
+
+    # generate an ORF fasta file
+    blastFile.write('>{}\n{}\n'.format(reg_1, reg_1))
+    blastFile.write('>{}\n{}\n'.format(reg_2, reg_2))
+    blastFile.write('>{}\n{}'.format(reg_3, reg_3))
+    blastFile.flush() # flush the buffer
+    blastFile.close() # no longer need to write to it, so close file
+
+    command = '{} -query {} -db {} -subject_besthit -outfmt "6 delim=, std salltitles"'.format(blast, blastFile.name, db)
+    blast_results = subprocess.check_output([command], shell = True) # returns a byte level blast result that should be decoded into a string
+    
+    # check that return code is not anything other than 0
+    try:
+        blast_results.check_returncode
+    except CalledProcessError as e:
+        print('There was a runtime error in your blast search. \n {}'.format(e))
+        
+    # decode blast results and extract the matching protein of found frame, corresponding protein ID, and gene symbol 
+    frame_matches = re.findall(r'(.+?),(.+?),.+?GN=(.+?)\s', blast_results.decode()) # returns a list of tuples each of length 3
+
+
+
 def filtering_criteria(event_type :str, base_df : pandas.DataFrame, geneMatch : str, annot_filter : bool, diff_exp : Union[str, None], pval_adj : float)  -> pandas.DataFrame:
     '''
     input:
@@ -1016,6 +1057,9 @@ if __name__ == '__main__':
     parser.add_argument('--testMode', action = 'store_true', help = 'Ignores some of the filtering criteria so all input cases are used for testing code.')
     parser.add_argument('--knownJunctions', type = str, required = True, help = 'path to sjdbList.fromGTF.out.tab generated within STARgenome directory' )
     parser.add_argument('--geneMatchFile', type = str, help = 'The output of greping the 9th column of a gtf file (see extras folder to find grep command) or a tab-delimited ensembl to gene name match')
+    parser.add_argument('--blast', type = str, help = 'Full path to executable, including executable to standalone blastp software from NCBI')
+    parser.add_argument('--blastDb', type = str, help = 'Full path to blastp database to use for identifying proper protein reading frame; typically this is a genome-wide uniport annotated protein database formatted for standalone BLAST for your organism; see extras folder for information on how to generate this')
+    
     args = parser.parse_args()
     
     codon_library = generate_codon_reference()
