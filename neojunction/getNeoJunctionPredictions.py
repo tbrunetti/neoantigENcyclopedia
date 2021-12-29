@@ -12,12 +12,30 @@ from typing import *
 import gc
 
 
-def filtering_criteria(event_type :str, base_df : pandas.DataFrame, annot_filter : bool, diff_exp : Union[str, None], pval_adj : float)  -> pandas.DataFrame:
+def filtering_criteria(event_type :str, base_df : pandas.DataFrame, geneMatch : str, annot_filter : bool, diff_exp : Union[str, None], pval_adj : float)  -> pandas.DataFrame:
     '''
     input:
     description:
     return:
     '''
+    
+    def format_gtf_column():
+        tmp_pair = {}
+        with open(geneMatch, 'r') as nameInfo:
+            for line in nameInfo:
+                if (line.split(':')[0]) in tmp_pair:
+                    tmp_pair[line.split(':')[0]].append(line.split(':')[1].replace('gene_id \"', '').replace('\";', '').replace('gene_name \"', '').strip())
+                else:
+                    tmp_pair[line.split(':')[0]] = [line.split(':')[1].replace('gene_id \"', '').replace('\";', '').replace('gene_name \"', '').strip()]
+
+        geneMap = pandas.DataFrame(tmp_pair.values(), columns = ['gene_name', 'symbol'])
+        #free memory
+        del tmp_pair
+        gc.collect()
+        geneMap.drop_duplicates(keep = 'first', inplace = True)
+
+        return geneMap
+        
     
     # check if using only novel junctions
     if event_type == 'intron_retention':
@@ -78,7 +96,19 @@ def filtering_criteria(event_type :str, base_df : pandas.DataFrame, annot_filter
         events_of_interest = filtered_junctions
     
 
-    return events_of_interest
+    # perform blast frame
+    geneMap = ''
+    with open(geneMatch, 'r') as testLine:
+        # means needs to be formatted since it is in grep output format
+        if testLine.readline().split('\t') == 1:
+            geneMap = format_gtf_column()
+            annotated_events_of_interest = events_of_interest.merge(geneMap, how = 'left', on = 'gene_name')
+        # means already formatted and ready to merge
+        else:
+            geneMap = pandas.read_csv(geneMatch, sep = '\t',  header = None, names = ['gene_name', 'symbol']) 
+            annotated_events_of_interest = events_of_interest.merge(geneMap, how = 'left', on = 'gene_name')
+
+    return annotated_events_of_interest
 
 @profile
 def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, strand : str, chrom : str, flank_left_start: int, flank_left_end: int, flank_right_start: int, flank_right_end : int, ase_start : Union[int, None], ase_end : Union[int, None]) -> list[Dna]:
@@ -338,7 +368,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
     # merge data frame (ignore strand since some discrpenacies with undetermined in star vs determined in spladder)
     info_combine = as_events.merge(junctions, how = 'left', on = ['chrom', 'intron_start', 'intron_end'])
     
-    events_of_interest = filtering_criteria(event_type = 'intron_retention', base_df = info_combine, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+    events_of_interest = filtering_criteria(event_type = 'intron_retention', base_df = info_combine, geneMatch = args.geneMatchFile, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
     
     # free up memory
     del info_combine
@@ -347,7 +377,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
     # only get unique event ids.-- drop all duplicated event ids and store counts of duplication in df for later annotation as warning for false positive of novel junction
     unique_events_of_interest = events_of_interest.drop(['annotStatus'], axis=1)
     unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
-    total_events = unique_events_of_interest['event_id'].value_counts()
+    # total_events = unique_events_of_interest['event_id'].value_counts()
     
     # check if strandSTAR and strand are concordant
     #       if not concordant, check if strandSTAR is ud
@@ -421,7 +451,7 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     final = info_combine.merge(tmp, how = 'left', on = ['chrom', 'aft_intron_start', 'aft_intron_end'])
 
     # apply data filtering criteria
-    events_of_interest = filtering_criteria(event_type = 'exon_skip', base_df = final, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+    events_of_interest = filtering_criteria(event_type = 'exon_skip', base_df = final, geneMatch = args.geneMatchFile, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
 
     # free up memory
     del tmp, final, info_combine
@@ -549,7 +579,7 @@ def three_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : st
     gc.collect()
     
     # apply data filtering criteria
-    events_of_interest = filtering_criteria(event_type = 'three_prime_alt', base_df = combined_strand_events, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+    events_of_interest = filtering_criteria(event_type = 'three_prime_alt', base_df = combined_strand_events, geneMatch = args.geneMatchFile, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
 
     # only get unique event ids.-- drop all duplicated event ids and store counts of duplication in df for later annotation as warning for false positive of novel junction
     unique_events_of_interest = events_of_interest.drop(['annotStatus_alt1', 'annotStatus_alt2'], axis=1)
@@ -721,7 +751,7 @@ def five_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str
     gc.collect()
     
     # apply data filtering criteria
-    events_of_interest = filtering_criteria(event_type = 'five_prime_alt', base_df = combined_strand_events, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+    events_of_interest = filtering_criteria(event_type = 'five_prime_alt', base_df = combined_strand_events, geneMatch = args.geneMatchFile, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
 
     # only get unique event ids.-- drop all duplicated event ids and store counts of duplication in df for later annotation as warning for false positive of novel junction
     unique_events_of_interest = events_of_interest.drop(['annotStatus_alt1', 'annotStatus_alt2'], axis=1)
@@ -885,7 +915,7 @@ def mutex(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> None
     gc.collect()
     
     # apply data filtering criteria
-    events_of_interest = filtering_criteria(event_type = 'mutex', base_df = final, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
+    events_of_interest = filtering_criteria(event_type = 'mutex', base_df = final, geneMatch = args.geneMatchFile, annot_filter = args.novel, diff_exp = args.deTestResults, pval_adj = args.pvalAdj)
 
     # only get unique event ids.-- drop all duplicated event ids and store counts of duplication in df for later annotation as warning for false positive of novel junction
     unique_events_of_interest = events_of_interest.drop(['annotStatus_exon1_pre', 'annotStatus_exon1_aft', 'annotStatus_exon2_pre', 'annotStatus_exon2_aft'], axis=1)
@@ -985,6 +1015,7 @@ if __name__ == '__main__':
     parser.add_argument('--modules', default = os.path.join(os.getcwd(), '..', 'modules'), help = "full path to the modules directory location")
     parser.add_argument('--testMode', action = 'store_true', help = 'Ignores some of the filtering criteria so all input cases are used for testing code.')
     parser.add_argument('--knownJunctions', type = str, required = True, help = 'path to sjdbList.fromGTF.out.tab generated within STARgenome directory' )
+    parser.add_argument('--geneMatchFile', type = str, help = 'The output of greping the 9th column of a gtf file (see extras folder to find grep command) or a tab-delimited ensembl to gene name match')
     args = parser.parse_args()
     
     codon_library = generate_codon_reference()
