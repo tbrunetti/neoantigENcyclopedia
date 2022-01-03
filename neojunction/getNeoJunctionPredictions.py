@@ -11,8 +11,8 @@ from funcsForRefs import *
 from typing import *
 import gc
 
-
-def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, chrom : str, const_region_start : int, const_region_end : int, strand : str) -> None:
+@profile
+def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, chrom : str, const_region_start : int, const_region_end : int, strand : str, gene : str):
     import subprocess
     import re
 
@@ -32,7 +32,7 @@ def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, ch
         reg_2 = Dna(Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
         reg_3 = Dna(Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
 
-    # generate an ORF fasta file
+    # generate an ORF
     blastFile.write('>{}\n{}\n'.format(reg_1, reg_1))
     blastFile.write('>{}\n{}\n'.format(reg_2, reg_2))
     blastFile.write('>{}\n{}'.format(reg_3, reg_3))
@@ -41,17 +41,29 @@ def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, ch
 
     command = '{} -query {} -db {} -subject_besthit -outfmt "6 delim=, std salltitles"'.format(blast, blastFile.name, db)
     blast_results = subprocess.check_output([command], shell = True) # returns a byte level blast result that should be decoded into a string
-    
+    print(blast_results)
     # check that return code is not anything other than 0
+    '''
     try:
         blast_results.check_returncode
     except CalledProcessError as e:
         print('There was a runtime error in your blast search. \n {}'.format(e))
+    '''
         
-    # decode blast results and extract the matching protein of found frame, corresponding protein ID, and gene symbol 
-    frame_matches = re.findall(r'(.+?),(.+?),.+?GN=(.+?)\s', blast_results.decode()) # returns a list of tuples each of length 3
+    # decode blast results and extract the matching protein of found frame, corresponding preotein ID, and gene symbol 
+    #frame_matches = re.findall(r'(.+?),(.+?),.+?GN=(.+?)\s', blast_results.decode()) # returns a list of tuples each of length 3
+    frame_matches = re.findall(r'(.+?),(.+?),.+?,.+?,.+?,.+?,.+?,.+?,.+?,.+?,(.+?),.+?GN=(.+?)\s', blast_results.decode()) # returns a list of tuples each of length 4
 
-
+    # find matching frame of gene name listed relative to upstream constant region identified
+    correct_frame = [blastMatch for blastMatch in frame_matches if gene in blastMatch]
+    print(correct_frame)
+    if len(correct_frame) == 0: # means none of the frame match the gene identified in spladder df
+        return ('none found', 'none found', 'none found', 'none found')
+    elif len(correct_frame) == 1: # means only a single frame matches the gene idenfied in spladder
+        return correct_frame[0]
+    else: # means multiple frames matches the gene identified in spladder
+        return ('>1', '>1', '>1', '>1')
+    
 
 def filtering_criteria(event_type :str, base_df : pandas.DataFrame, geneMatch : str, annot_filter : bool, diff_exp : Union[str, None], pval_adj : float)  -> pandas.DataFrame:
     '''
@@ -141,7 +153,7 @@ def filtering_criteria(event_type :str, base_df : pandas.DataFrame, geneMatch : 
     geneMap = ''
     with open(geneMatch, 'r') as testLine:
         # means needs to be formatted since it is in grep output format
-        if testLine.readline().split('\t') == 1:
+        if len(testLine.readline().split('\t')) == 1:
             geneMap = format_gtf_column()
             annotated_events_of_interest = events_of_interest.merge(geneMap, how = 'left', on = 'gene_name')
         # means already formatted and ready to merge
@@ -151,7 +163,7 @@ def filtering_criteria(event_type :str, base_df : pandas.DataFrame, geneMatch : 
 
     return annotated_events_of_interest
 
-@profile
+
 def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_length : int, strand : str, chrom : str, flank_left_start: int, flank_left_end: int, flank_right_start: int, flank_right_end : int, ase_start : Union[int, None], ase_end : Union[int, None]) -> list[Dna]:
     '''
     input:
@@ -336,7 +348,7 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
         
 
 
-def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dict[str,str]]) -> Dict[str, Dict[str, str]]:
+def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dict[str,str]], upstream_cont : int, correct_frame_only : bool) -> Dict[str, Dict[str, str]]:
     rna_list = [] # a list of Rna objects
     orf_ids = {}
     for dna in orfs:
@@ -391,7 +403,7 @@ def combine_data(junctionFiles : list, annotation : str) -> pandas.DataFrame:
     return fully_annotated
 
 
-
+@profile
 def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> None:
     '''
     input:
@@ -419,15 +431,46 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
     unique_events_of_interest = events_of_interest.drop(['annotStatus'], axis=1)
     unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
     # total_events = unique_events_of_interest['event_id'].value_counts()
+    '''
+    Experimental blast implementation
+    *** needs testing ***
+    '''
+    if args.frameMatch:
+        
+        unique_events_of_interest.reset_index(drop=True, inplace = True)
+
+        unique_events_of_interest[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = ''
+        for idx, row in unique_events_of_interest.iterrows():
+            print(idx)
+            if row['strand'] == '+':
+                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
+            elif row['strand'] == '-':
+                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
+            
+            #row[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = blast_results[0], blast_results[1], blast_results[2], blast_results[3]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'upstream_region_translated_frame'] = blast_results[0]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'annotated_peptide'] = blast_results[1]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_expected_value'] = blast_results[2]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_gene'] = blast_results[0]
+
+            del blast_results
+            gc.collect()
+    
+    unique_events_of_interest.to_csv("testing_blast.txt", sep = "\t", index=False)
+    raise SystemExit
+    '''
+    end of experimental blast implementation
+    '''    
     
     # check if strandSTAR and strand are concordant
     #       if not concordant, check if strandSTAR is ud
     #            if ud, then use strand
-    #       if concordant then continue
+    #       if concordant then continue   
+    
     for idx,row in unique_events_of_interest.iterrows():
         if ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] == 'ud')):
             orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
-            peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
+            peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides, upstream_cont = int, correct_frame_only = args.frameMatch)
             
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
             try:
@@ -552,7 +595,6 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
    
 
 
-@profile
 def three_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> None:
     '''
     input:
@@ -1059,12 +1101,13 @@ if __name__ == '__main__':
     parser.add_argument('--geneMatchFile', type = str, help = 'The output of greping the 9th column of a gtf file (see extras folder to find grep command) or a tab-delimited ensembl to gene name match')
     parser.add_argument('--blast', type = str, help = 'Full path to executable, including executable to standalone blastp software from NCBI')
     parser.add_argument('--blastDb', type = str, help = 'Full path to blastp database to use for identifying proper protein reading frame; typically this is a genome-wide uniport annotated protein database formatted for standalone BLAST for your organism; see extras folder for information on how to generate this')
+    parser.add_argument('--frameMatch', action = 'store_true', help = 'only translates and returns peptide that have a curated protein match from blast results in correct reading frame.  Otherwise, returns all frames regardless of match.')
     
     args = parser.parse_args()
     
     codon_library = generate_codon_reference()
     dna_fasta = SeqIO.index(args.fasta, 'fasta')
-    junctions = combine_data(junctionFiles = args.SJfiles, annotation = args.knownJuctions)
+    junctions = combine_data(junctionFiles = args.SJfiles, annotation = args.knownJunctions)
     
     if args.eventType == 'intron_retention':
         intron_retention(junctions = junctions, spladderOut = args.ase, outdir = args.outdir)
