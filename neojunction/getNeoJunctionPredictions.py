@@ -55,14 +55,19 @@ def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, ch
     frame_matches = re.findall(r'(.+?),(.+?),.+?,.+?,.+?,.+?,.+?,.+?,.+?,.+?,(.+?),.+?GN=(.+?)\s', blast_results.decode()) # returns a list of tuples each of length 4
 
     # find matching frame of gene name listed relative to upstream constant region identified
-    correct_frame = [blastMatch for blastMatch in frame_matches if gene in blastMatch]
+    all_correct_frames = [blastMatch for blastMatch in frame_matches if gene in blastMatch]
+    correct_frame = list(set(all_correct_frames))
     print(correct_frame)
+    
     if len(correct_frame) == 0: # means none of the frame match the gene identified in spladder df
         return ('none found', 'none found', 'none found', 'none found')
     elif len(correct_frame) == 1: # means only a single frame matches the gene idenfied in spladder
         return correct_frame[0]
-    else: # means multiple frames matches the gene identified in spladder
-        return ('>1', '>1', '>1', '>1')
+    else: # means multiple frames matches the gene identified in spladder -- pick one with best e-value from BLAST
+        evals = []
+        for results in correct_frame:
+            evals.append(float(results[2]))
+        return correct_frame[evals.index(min(evals))] 
     
 
 def filtering_criteria(event_type :str, base_df : pandas.DataFrame, geneMatch : str, annot_filter : bool, diff_exp : Union[str, None], pval_adj : float)  -> pandas.DataFrame:
