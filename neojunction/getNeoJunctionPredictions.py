@@ -284,7 +284,8 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
             else: 
                 orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:event_index[1] + 1 + orf_1_end])
                 orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:event_index[1] + 1 +  orf_2_end])
-                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:event_index[1] + 1 + orf_3_end])                      
+                orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:event_index[1] + 1 + orf_3_end])
+                check_frame_region = kmer_length - 1   # number of amino acids to check upstream as a substring
 
         # means only the start or end is a constant regions and the remainder of the orf window should fully be translated through the end of the sequence (ex: alt 3', alt 5')
         else:
@@ -349,22 +350,50 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
         orf_2_region = Dna(orf_2_region.reverse_complement())
         orf_3_region = Dna(orf_3_region.reverse_complement())
     
-    return [orf_1_region, orf_2_region, orf_3_region]
+    return [orf_1_region, orf_2_region, orf_3_region], check_frame_region
         
 
 
-def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dict[str,str]], upstream_cont : int, correct_frame_only : bool) -> Dict[str, Dict[str, str]]:
+def translate_orfs(event_id: str, orfs : list[Dna], peptide_bank : Dict[str, Dict[str,str]], upstream_const : str, correct_frame_only : bool, frame_check: int) -> Dict[str, Dict[str, str]]:
     rna_list = [] # a list of Rna objects
     orf_ids = {}
+    matching_frames = {}
     for dna in orfs:
         rna_list.append(dna.transcribe()) # transcribe() returns an Rna object
         
     for orf, rna in enumerate(rna_list):
         print((orf, rna))
         print(event_id, rna.translate(codon_library, False))
-        orf_ids['orf_{}_region'.format(orf)] = rna.translate(codon_library, False)
+        if correct_frame_only:
+            # return the highest index where contsant upstream region was found
+            matching_frames[orf] = upstream_const.rfind(rna.translate(codon_library, False)[:frame_check])
+            orf_ids['orf_{}_region'.format(orf)] = rna.translate(codon_library, False)
+        else:
+            orf_ids['orf_{}_region'.format(orf)] = rna.translate(codon_library, False)
+            
+    if correct_frame_only:
+        # confirm all keys are not -1, if yes all -1 decrease frame_length by 1
+        try:
+            assert max(matching_frames.values()) != -1
+            correct_orf_key = max(matching_frames, key=matching_frames.get)
+            peptide_bank[event_id] = orf_ids['orf_{}_region'.format(correct_orf_key)]
+        except AssertionError:
+            frame_check = frame_check - 1
+            for orf, rna in enumerate(rna_list):
+                matching_frames[orf] = upstream_const.rfind(rna.translate(codon_library, False)[:frame_check])
+                orf_ids['orf_{}_region'.format(orf)] = rna.translate(codon_library, False)
+                
+            try: 
+                assert max(matching_frames.values()) != -1
+                correct_orf_key = max(matching_frames, key=matching_frames.get)
+                peptide_bank[event_id] = orf_ids['orf_{}_region'.format(correct_orf_key)]
+
+            except AssertionError:
+                print('For event id, {}, there are no valid matching open reading frames with know protein accession ids.'.format(event_id))
+                peptide_bank[event_id] = 'No open reading frame detected'
+    else:
+        peptide_bank[event_id] = orf_ids
     
-    peptide_bank[event_id] = orf_ids
     
     return peptide_bank
     
@@ -448,21 +477,27 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
         for idx, row in unique_events_of_interest.iterrows():
             print(idx)
             if row['strand'] == '+':
-                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
+                #blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
+                blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
+
             elif row['strand'] == '-':
-                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
-            
+                #blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
+                blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
+
             #row[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = blast_results[0], blast_results[1], blast_results[2], blast_results[3]
             unique_events_of_interest.at[unique_events_of_interest.index[idx], 'upstream_region_translated_frame'] = blast_results[0]
             unique_events_of_interest.at[unique_events_of_interest.index[idx], 'annotated_peptide'] = blast_results[1]
             unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_expected_value'] = blast_results[2]
-            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_gene'] = blast_results[0]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_gene'] = blast_results[3]
 
             del blast_results
             gc.collect()
     
     unique_events_of_interest.to_csv("testing_blast.txt", sep = "\t", index=False)
-    raise SystemExit
+    filter_annotations = unique_events_of_interest.loc[unique_events_of_interest['annotated_peptide'] != 'none found'] # remove rows where a blast hit to a protein was not found
+    unique_events_of_interest = filter_annotations
+    del filter_annotations
+    gc.collect()
     '''
     end of experimental blast implementation
     '''    
@@ -474,8 +509,8 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
     
     for idx,row in unique_events_of_interest.iterrows():
         if ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] == 'ud')):
-            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
-            peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides, upstream_cont = int, correct_frame_only = args.frameMatch)
+            orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
+            peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
             
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
             try:
@@ -1128,8 +1163,3 @@ if __name__ == '__main__':
     
     if args.eventType == 'mutex':
         mutex(junctions = junctions, spladderOut = args.ase, outdir = args.outdir)
-        
-    '''
-    TO DO: add GTF for frame matching check -- make sure pblast gene hit matches gtf gene hit
-    base on Ensembl gene name provided by spladder
-    '''
