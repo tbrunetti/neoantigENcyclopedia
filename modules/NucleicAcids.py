@@ -23,22 +23,43 @@ class Rna:
     
     def translate(self, codon_library : Dict[str, Codon], ignore_stop : bool) -> str:
         import math
-        
-        last_loop = math.floor(len(self.sequence)/3) - 1 # ensures codon is not translated if too short
-        
+         
+        #last_loop = math.floor(len(self.sequence)/3) - 1 # ensures codon is not translated if too short
+        last_loop_adjustment = len(self.sequence) % 3
         protein_seq = []
         
-        if ignore_stop == True:
-            for loopId, codon in enumerate(range(0, len(self.sequence), 3)):
-                if loopId != last_loop:  # confirms this is last loop that contains a full valid codon              
+        try:
+            if ignore_stop == True:
+                '''
+                for loopId, codon in enumerate(range(0, len(self.sequence), 3)):
+                    if loopId != last_loop:  # confirms this is last loop that contains a full valid codon              
+                        protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                    elif loopId == last_loop:
+                        protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                        break
+                '''
+                for codon in range(0, len(self.sequence) - last_loop_adjustment, 3):
                     protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
-                elif loopId == last_loop:
-                    protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
-                    break
 
-        else:
-            for loopId, codon in enumerate(range(0, len(self.sequence), 3)):
-                if loopId != last_loop:  # confirms this is last loop that contains a full valid codon
+
+            else:
+                '''
+                for loopId, codon in enumerate(range(0, len(self.sequence), 3)):
+                    if loopId != last_loop:  # confirms this is last loop that contains a full valid codon
+                        try:
+                            assert codon_library[self.sequence[codon:codon+3]].translate_symbol() != '*', "Stop codon has been reached...suspending the remainder of the translation"
+                            protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                        except AssertionError as e:
+                            print(e)
+                            protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                            break
+                    
+                    elif loopId == last_loop:
+                        protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
+                        break
+                '''    
+
+                for codon in range(0, len(self.sequence) - last_loop_adjustment, 3):
                     try:
                         assert codon_library[self.sequence[codon:codon+3]].translate_symbol() != '*', "Stop codon has been reached...suspending the remainder of the translation"
                         protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
@@ -46,10 +67,12 @@ class Rna:
                         print(e)
                         protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
                         break
-                
-                elif loopId == last_loop:
-                    protein_seq.append(codon_library[self.sequence[codon:codon+3]].translate_symbol())
-                    break
+        
+        except KeyError as e:
+            print('Issue: {}.'.format(e))
+            print('sequence: {}'.format(self.sequence))
+            print('last loop calculation: {}'.format(str(last_loop_adjustment)))
+            print('protein seq until error: {}'.format(''.join(protein_seq)))
         
         return ''.join(protein_seq)
         
