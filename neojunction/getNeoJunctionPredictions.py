@@ -528,7 +528,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
             try:
                 if args.testMode: # forces the translation despite mismatch or NaN and use spladder's strand since just for testing mode
-                    orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
+                    orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
                     peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
                     unique_events_of_interest.at[unique_events_of_interest.index[idx], 'translated_ase_peptide'] = peptides[row['event_id']]
 
@@ -537,7 +537,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
                 continue
             
         elif (row['strandSTAR'] == row['strand']):
-            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
+            orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
             peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
             unique_events_of_interest.at[unique_events_of_interest.index[idx], 'translated_ase_peptide'] = peptides[row['event_id']]
 
@@ -545,7 +545,6 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
         gc.collect()
 
     # TO DO: calcuate percent overlap of kmer with flanking region
-    
     
     
     # get psi info columns
