@@ -256,20 +256,20 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
                 orf_1_region = Dna(dna_continuous_seq.sequence)
                 orf_2_region = Dna(dna_continuous_seq.sequence[1:])
                 orf_3_region = Dna(dna_continuous_seq.sequence[2:])
-                check_frame_region = math.floor(len(dna_continuous_seq[:event_index[0]])/3)
+                check_frame_region = math.floor(len(dna_continuous_seq.sequence[:event_index[0]])/3)
             # if upstream and downstream exon is smaller than kmer window take full region (- strand)
             elif (event_index[0] < max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) < max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
                 orf_1_region = Dna(dna_continuous_seq.sequence)
                 orf_2_region = Dna(dna_continuous_seq.sequence[:-1])
                 orf_3_region = Dna(dna_continuous_seq.sequence[:-2])
-                check_frame_region = math.floor(len(dna_continuous_seq[event_index[1]+1:])/3)
+                check_frame_region = math.floor(len(dna_continuous_seq.sequence[event_index[1]+1:])/3)
 
             # if left exon is smaller than kmer widown but right flank exceeds kmer window (+ strand)
             elif (event_index[0] < max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '+'):
                 orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[1] + orf_1_end])
                 orf_2_region = Dna(dna_continuous_seq.sequence[1:event_index[1] + orf_2_end])
                 orf_3_region = Dna(dna_continuous_seq.sequence[2:event_index[1] + orf_3_end]) 
-                check_frame_region = math.floor(len(dna_continuous_seq[:event_index[0]])/3)
+                check_frame_region = math.floor(len(dna_continuous_seq.sequence[:event_index[0]])/3)
             # if left exon is smaller than kmer widown but right flank exceeds kmer window (- strand)
             elif (event_index[0] < max(orf_1_start, orf_2_start, orf_3_start)) & ((len(dna_continuous_seq.sequence) - event_index[1]+1) > max(orf_1_end, orf_2_end, orf_3_end)) & (strand == '-'):
                 orf_1_region = Dna(dna_continuous_seq.sequence[:event_index[1] + orf_1_end])
@@ -287,7 +287,7 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
                 orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:])
                 orf_2_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_2_start:-1])
                 orf_3_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_3_start:-2])
-                check_frame_region = math.floor(len(dna_continuous_seq[event_index[1]+1:])/3)
+                check_frame_region = math.floor(len(dna_continuous_seq.sequence[event_index[1]+1:])/3)
             # means both flanking exon exceed kmer windows
             else: 
                 orf_1_region = Dna(dna_continuous_seq.sequence[event_index[0] - orf_1_start:event_index[1] + 1 + orf_1_end])
