@@ -12,6 +12,32 @@ from typing import *
 import gc
 import math
 
+
+def flags(final_df : pandas.DataFrame) -> pandas.DataFrame:
+    '''
+    input:
+    description:
+    return:
+    '''
+    final_df[['constant_region_premature_stop', 'short_ase_length', 'ase_stop_encountered']] = bool, bool, bool
+    final_df['constant_region_premature_stop'] = final_df['upstream_region_translated_frame'].str.contains("\*")
+    final_df['short_ase_length'] = final_df['translated_ase_peptide'].str.len() < kmer_length
+    final_df['ase_stop_encountered'] = final_df['translated_ase_peptide'].str.contains("\*")
+    
+    strict_clean_flags_df = final_df.loc[(final_df['constant_region_premature_stop'] == False) & (final_df['short_ase_length'] == False) & (final_df['blast_expected_value'].astype(float) < 0.0001)]
+
+    strict_clean_flags_df.to_csv('final_dataframe_test_cleaned_flags.txt', sep = "\t")
+    
+    fasta_netmhc_file = open('intron_retentions_netmhc_file.fasta', 'w')
+    
+    for idx,row in strict_clean_flags_df.iterrows():
+        fasta_netmhc_file.write('>{}\n{}\n'.format(idx, row['translated_ase_peptide']))
+        fasta_netmhc_file.flush()
+    
+    fasta_netmhc_file.close()
+
+    return final_df
+
 @profile
 def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, chrom : str, const_region_start : int, const_region_end : int, strand : str, gene : str):
     import subprocess
@@ -524,6 +550,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
             orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
             peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
             unique_events_of_interest.at[unique_events_of_interest.index[idx], 'translated_ase_peptide'] = peptides[row['event_id']]
+            print(peptides[row['event_id']])
 
         elif ((row['strandSTAR'] != row['strand']) & (row['strandSTAR'] != 'ud')):
             try:
@@ -531,6 +558,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
                     orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
                     peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
                     unique_events_of_interest.at[unique_events_of_interest.index[idx], 'translated_ase_peptide'] = peptides[row['event_id']]
+                    print(peptides[row['event_id']])
 
             except:
                 print('star strand is {} and spladder strands is {}.  Skipping event.'.format(str(row['strandSTAR']), row['strand']))
@@ -540,6 +568,7 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
             orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strandSTAR'], chrom = row['chrom'], flank_left_start = int(row['exon1_start']), flank_left_end = int(row['exon1_end']), flank_right_start = int(row['exon2_start']), flank_right_end = int(row['exon2_end']), ase_start = int(row['intron_start']), ase_end = int(row['intron_end']))
             peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
             unique_events_of_interest.at[unique_events_of_interest.index[idx], 'translated_ase_peptide'] = peptides[row['event_id']]
+            print(peptides[row['event_id']])
 
         del orfs
         gc.collect()
