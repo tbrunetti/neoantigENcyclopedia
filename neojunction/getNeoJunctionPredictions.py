@@ -514,12 +514,12 @@ def intron_retention(junctions : pandas.DataFrame, spladderOut : str, outdir : s
         for idx, row in unique_events_of_interest.iterrows():
             print(idx)
             if row['strand'] == '+':
-                #blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
-                blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
+                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
+                #blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon1_start']), const_region_end = int(row['exon1_end']), strand = row['strand'], gene = row['symbol'])
 
             elif row['strand'] == '-':
-                #blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
-                blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
+                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
+                #blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon2_start']), const_region_end = int(row['exon2_end']), strand = row['strand'], gene = row['symbol'])
 
             #row[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = blast_results[0], blast_results[1], blast_results[2], blast_results[3]
             unique_events_of_interest.at[unique_events_of_interest.index[idx], 'upstream_region_translated_frame'] = blast_results[0]
@@ -630,12 +630,54 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
     total_events = unique_events_of_interest['event_id'].value_counts()
     
+    
+    '''
+    Experimental blast implementation
+    *** needs testing ***
+    '''
+    if args.frameMatch:
+        
+        unique_events_of_interest.reset_index(drop=True, inplace = True)
+
+        unique_events_of_interest[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = ''
+        for idx, row in unique_events_of_interest.iterrows():
+            print(idx)
+            if row['strand'] == '+':
+                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_pre_start']), const_region_end = int(row['exon_pre_end']), strand = row['strand'], gene = row['symbol'])
+                #blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_pre_start']), const_region_end = int(row['exon_pre_end']), strand = row['strand'], gene = row['symbol_x'])
+
+            elif row['strand'] == '-':
+                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_aft_start']), const_region_end = int(row['exon_aft_end']), strand = row['strand'], gene = row['symbol'])
+                #blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_aft_start']), const_region_end = int(row['exon_aft_end']), strand = row['strand'], gene = row['symbol_x'])
+
+            row[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = blast_results[0], blast_results[1], blast_results[2], blast_results[3]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'upstream_region_translated_frame'] = blast_results[0]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'annotated_peptide'] = blast_results[1]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_expected_value'] = blast_results[2]
+            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_gene'] = blast_results[3]
+
+            del blast_results
+            gc.collect()
+    
+    '''
+    end of experimental blast implementation
+    '''  
+    unique_events_of_interest = pandas.read_csv("/home/tonya/software/neoantigENcyclopedia/neojunction/exon_skip_testing_blast_03202021.txt", sep = '\t')
+    filter_annotations = unique_events_of_interest.loc[unique_events_of_interest['annotated_peptide'] != 'none found'] # remove rows where a blast hit to a protein was not found
+    unique_events_of_interest = filter_annotations
+    del filter_annotations
+    gc.collect()
+
+    
     # check if strandSTAR and strand are concordant
     #       if not concordant, check if strandSTAR is ud
     #            if ud, then use strand
     #       if concordant then continue
+    unique_events_of_interest.reset_index(drop=True, inplace = True)
+    unique_events_of_interest['translated_ase_peptide'] = ''
+    
     for idx,row in unique_events_of_interest.iterrows():
-        
+        print(idx)
         try:
             assert row['strandSTAR_pre'] == row['strandSTAR_aft'], 'There is a strand conflict at the following event_id: {}.  Skipping this event.'.format(row['event_id'])
         except  AssertionError as err:
@@ -667,7 +709,7 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
    
     # TO DO: calcuate percent overlap of kmer with flanking region
     
-    
+    unique_events_of_interest.to_csv("exon_skip_final_dataframe_test.txt", sep = "\t")
     # get psi info columns
     unique_events_of_interest.filter(regex = '.psi', axis = 1)
     # get read coverage info columns
@@ -753,7 +795,17 @@ def three_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : st
     unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
     total_events = unique_events_of_interest['event_id'].value_counts()
 
-
+    '''
+    Experimental blast implementation
+    *** needs testing ***
+    '''
+    
+    # TO DO
+    
+    '''
+    end of experimental blast implementation
+    '''  
+    
     # check if strandSTAR and strand are concordant
     #       if alt1 and alt2 are not concordant within just star, then skip\
     #       if not concordant between star and stran, check if strandSTAR is ud
@@ -925,6 +977,19 @@ def five_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str
     unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
     total_events = unique_events_of_interest['event_id'].value_counts()
     
+    
+    '''
+    Experimental blast implementation
+    *** needs testing ***
+    '''
+    
+    # TO DO
+    
+    '''
+    end of experimental blast implementation
+    '''  
+   
+   
     # check if strandSTAR and strand are concordant
     #       if alt1 and alt2 are not concordant within just star, then skip\
     #       if not concordant between star and strand, check if strandSTAR is ud
@@ -1089,6 +1154,17 @@ def mutex(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> None
     unique_events_of_interest.drop_duplicates(keep = 'first', inplace = True)
     #total_events = unique_events_of_interest['event_id'].value_counts()
         
+    '''
+    Experimental blast implementation
+    *** needs testing ***
+    '''
+    
+    # TO DO
+    
+    '''
+    end of experimental blast implementation
+    '''  
+    
     # check if strandSTAR and strand are concordant
     #       if alt1 and alt2 are not concordant within just star, then skip\
     #       if not concordant between star and strand, check if strandSTAR is ud
