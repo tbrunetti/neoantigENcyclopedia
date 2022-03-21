@@ -655,7 +655,7 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     #def collect_results(result:pandas.DataFrame) -> None:
     #    match_frame_results.extend(result)
     
-    def match_frame(unique_events_of_interest : pandas.DataFrame, blast_tmp_file : int, shared_obj : multiprocessing.managers.ListProxy) -> pandas.DataFrame:
+    def match_frame(unique_events_of_interest : pandas.DataFrame, blast_tmp_file : int, shared_obj : list) -> list:
         '''
         Experimental blast implementation
         *** needs testing ***
@@ -683,7 +683,7 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
             del blast_results
             gc.collect()
         
-        shared_obj.extend(unique_events_of_interest)
+        shared_obj.append(unique_events_of_interest)
         return shared_obj # converts pandas DF to list
             
     if args.frameMatch:
@@ -701,7 +701,7 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
         for processes in parallelized_jobs:
             processes.join()
         
-        unique_events_of_interest = pandas.DataFrame(shared_list)
+        unique_events_of_interest = pandas.concat(shared_list)
         
         unique_events_of_interest.to_csv("/home/tonya/software/neoantigENcyclopedia/neojunction/test_parallel_exon_skip_testing_blast_03212021.txt", sep = '\t', index=False)
     
