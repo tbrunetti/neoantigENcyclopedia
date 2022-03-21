@@ -52,15 +52,32 @@ def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, ch
     blastFile = open(str(blast_tmp_file) + '_parallel_input_search.fasta', 'w')
     
     if strand == '+':
-        reg_1 = Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).transcribe().translate(codon_library, True)
-        reg_2 = Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).transcribe().translate(codon_library, True)
-        reg_3 = Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).transcribe().translate(codon_library, True)
+        try:
+            reg_1 = Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).transcribe().translate(codon_library, True)
+        except ValueError:
+            reg_1 = Dna('')
+        try:
+            reg_2 = Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).transcribe().translate(codon_library, True)
+        except ValueError:
+            reg_2 = Dna('')
+        try:
+            reg_3 = Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).transcribe().translate(codon_library, True)
+        except ValueError:
+            reg_3 = Dna('')
 
     elif strand == '-': # reverse complements region before translation
-        reg_1 = Dna(Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
-        reg_2 = Dna(Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
-        reg_3 = Dna(Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
-
+        try:
+            reg_1 = Dna(Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
+        except ValueError:
+            reg_1 = Dna('')
+        try:
+            reg_2 = Dna(Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
+        except ValueError:
+            reg_2 = Dna('')
+        try:
+            reg_3 = Dna(Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
+        except ValueError:
+            reg_3 = Dna('')
     # generate an ORF
     blastFile.write('>{}\n{}\n'.format(reg_1, reg_1))
     blastFile.write('>{}\n{}\n'.format(reg_2, reg_2))
@@ -638,7 +655,7 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     #def collect_results(result:pandas.DataFrame) -> None:
     #    match_frame_results.extend(result)
     
-    def match_frame(unique_events_of_interest : pandas.DataFrame, blast_tmp_file : int, shared_obj:list) -> list :
+    def match_frame(unique_events_of_interest : pandas.DataFrame, blast_tmp_file : int, shared_obj : multiprocessing.managers.ListProxy) -> pandas.DataFrame:
         '''
         Experimental blast implementation
         *** needs testing ***
@@ -666,13 +683,12 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
             del blast_results
             gc.collect()
         
-        shared_obj.append(unique_events_of_interest)
-        return shared_obj # a list of dataframes
+        shared_obj.extend(unique_events_of_interest)
+        return shared_obj # converts pandas DF to list
             
     if args.frameMatch:
         
         number_of_processes = math.ceil(multiprocessing.cpu_count()*.70) # use 70% of available CPUs
-        unique_events_of_interest = unique_events_of_interest[:100]
         df_chunks = numpy.array_split(unique_events_of_interest, number_of_processes) # returns a list of dataframes split into chunks matching number of processes available
         
         shared_list = multiprocessing.Manager().list()
@@ -685,8 +701,7 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
         for processes in parallelized_jobs:
             processes.join()
         
-        print(shared_list)
-        unique_events_of_interest = pandas.concat(shared_list)
+        unique_events_of_interest = pandas.DataFrame(shared_list)
         
         unique_events_of_interest.to_csv("/home/tonya/software/neoantigENcyclopedia/neojunction/test_parallel_exon_skip_testing_blast_03212021.txt", sep = '\t', index=False)
     
