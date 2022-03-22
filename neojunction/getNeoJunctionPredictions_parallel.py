@@ -1,4 +1,5 @@
 from multiprocessing import process
+from subprocess import CalledProcessError
 import Bio
 from Bio import SeqIO
 import pandas
@@ -14,6 +15,7 @@ import gc
 import math
 import multiprocessing
 import numpy
+import time
 
 def flags(final_df : pandas.DataFrame) -> pandas.DataFrame:
     '''
@@ -41,7 +43,7 @@ def flags(final_df : pandas.DataFrame) -> pandas.DataFrame:
     return final_df
 
 @profile
-def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, chrom : str, const_region_start : int, const_region_end : int, strand : str, gene : str, blast_tmp_file : int):
+def blast_search(event_id: str, blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, chrom : str, const_region_start : int, const_region_end : int, strand : str, gene : str, blast_tmp_file : int):
     import subprocess
     import re
 
@@ -49,36 +51,38 @@ def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, ch
     TO DO: check if file exists to make sure to warn user it will be overwritten in even they happen to have this file in their space
     '''
     
-    blastFile = open(str(blast_tmp_file) + '_parallel_input_search.fasta', 'w')
-    
     if strand == '+':
+        print(event_id, fasta[chrom].seq[const_region_start - 1 : const_region_end], const_region_start, const_region_end, chrom, const_region_start -1)
         try:
             reg_1 = Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).transcribe().translate(codon_library, True)
         except ValueError:
-            reg_1 = Dna('')
+            reg_1 = ''
         try:
             reg_2 = Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).transcribe().translate(codon_library, True)
-        except ValueError:
-            reg_2 = Dna('')
+        except ValueError: 
+            reg_2 = ''
         try:
             reg_3 = Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).transcribe().translate(codon_library, True)
         except ValueError:
-            reg_3 = Dna('')
+            reg_3 = ''
 
     elif strand == '-': # reverse complements region before translation
         try:
             reg_1 = Dna(Dna(fasta[chrom].seq[const_region_start - 1 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
         except ValueError:
-            reg_1 = Dna('')
+            reg_1 = ''
         try:
             reg_2 = Dna(Dna(fasta[chrom].seq[const_region_start - 2 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
         except ValueError:
-            reg_2 = Dna('')
+            reg_2 = ''
         try:
             reg_3 = Dna(Dna(fasta[chrom].seq[const_region_start - 3 : const_region_end]).reverse_complement()).transcribe().translate(codon_library, True)
         except ValueError:
-            reg_3 = Dna('')
+            reg_3 = ''
+
+
     # generate an ORF
+    blastFile = open(str(blast_tmp_file) + '_parallel_input_search.fasta', 'w')
     blastFile.write('>{}\n{}\n'.format(reg_1, reg_1))
     blastFile.write('>{}\n{}\n'.format(reg_2, reg_2))
     blastFile.write('>{}\n{}'.format(reg_3, reg_3))
@@ -86,8 +90,13 @@ def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, ch
     blastFile.close() # no longer need to write to it, so close file
 
     command = '{} -query {} -db {} -subject_besthit -outfmt "6 delim=, std salltitles"'.format(blast, blastFile.name, db)
-    blast_results = subprocess.check_output([command], shell = True) # returns a byte level blast result that should be decoded into a string
-    print(blast_results)
+    try:
+        blast_results = subprocess.check_output([command], shell = True) # returns a byte level blast result that should be decoded into a string
+        print(blast_results)
+    except CalledProcessError:
+        print("Error in subrocess call!  Skipping result")
+        return ('none found', 'none found', 'none found', 'none found')
+
     # check that return code is not anything other than 0
     '''
     try:
@@ -99,17 +108,24 @@ def blast_search(blast : str, db : str, fasta : Bio.File._IndexedSeqFileDict, ch
     # decode blast results and extract the matching protein of found frame, corresponding preotein ID, and gene symbol 
     #frame_matches = re.findall(r'(.+?),(.+?),.+?GN=(.+?)\s', blast_results.decode()) # returns a list of tuples each of length 3
     frame_matches = re.findall(r'(.+?),(.+?),.+?,.+?,.+?,.+?,.+?,.+?,.+?,.+?,(.+?),.+?GN=(.+?)\s', blast_results.decode()) # returns a list of tuples each of length 4
-
+    print(frame_matches, gene, event_id)
+    
     # find matching frame of gene name listed relative to upstream constant region identified
     all_correct_frames = [blastMatch for blastMatch in frame_matches if gene in blastMatch]
     correct_frame = list(set(all_correct_frames))
     print(correct_frame)
     
     if len(correct_frame) == 0: # means none of the frame match the gene identified in spladder df
+        del blastFile
+        gc.collect()
         return ('none found', 'none found', 'none found', 'none found')
     elif len(correct_frame) == 1: # means only a single frame matches the gene idenfied in spladder
+        del blastFile
+        gc.collect()
         return correct_frame[0]
     else: # means multiple frames matches the gene identified in spladder -- pick one with best e-value from BLAST
+        del blastFile
+        gc.collect()
         evals = []
         for results in correct_frame:
             evals.append(float(results[2]))
@@ -655,45 +671,49 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     #def collect_results(result:pandas.DataFrame) -> None:
     #    match_frame_results.extend(result)
     
-    def match_frame(unique_events_of_interest : pandas.DataFrame, blast_tmp_file : int, shared_obj : list) -> list:
+    def match_frame(chunk_df : pandas.DataFrame, blast_tmp_file : int, fasta : Bio.File._IndexedSeqFileDict, shared_obj : list) -> list:
         '''
         Experimental blast implementation
         *** needs testing ***
         '''
+        # each process requires its own instance of fasta
+        fasta = SeqIO.index(args.fasta, 'fasta')
+        
+        chunk_df.reset_index(drop=True, inplace = True)
 
-        unique_events_of_interest.reset_index(drop=True, inplace = True)
-
-        unique_events_of_interest[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = ''
-        for idx, row in unique_events_of_interest.iterrows():
+        chunk_df[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = ''
+        for idx, row in chunk_df.iterrows():
             print(idx)
+            print(row['event_id'], row['chrom'], row['exon_pre_start'], row['exon_pre_end'], row['symbol'])
             if row['strand'] == '+':
-                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_pre_start']), const_region_end = int(row['exon_pre_end']), strand = row['strand'], gene = row['symbol'], blast_tmp_file = blast_tmp_file)
+                blast_results = blast_search(event_id = row['event_id'], blast = args.blast, db = args.blastDb, fasta = fasta, chrom = row['chrom'], const_region_start = int(row['exon_pre_start']), const_region_end = int(row['exon_pre_end']), strand = row['strand'], gene = row['symbol'], blast_tmp_file = blast_tmp_file)
                 #blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_pre_start']), const_region_end = int(row['exon_pre_end']), strand = row['strand'], gene = row['symbol_x'])
 
             elif row['strand'] == '-':
-                blast_results = blast_search(blast = args.blast, db = args.blastDb, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_aft_start']), const_region_end = int(row['exon_aft_end']), strand = row['strand'], gene = row['symbol'], blast_tmp_file = blast_tmp_file)
+                blast_results = blast_search(event_id = row['event_id'], blast = args.blast, db = args.blastDb, fasta = fasta, chrom = row['chrom'], const_region_start = int(row['exon_aft_start']), const_region_end = int(row['exon_aft_end']), strand = row['strand'], gene = row['symbol'], blast_tmp_file = blast_tmp_file)
                 #blast_results = blast_search(blast = blast, db = db, fasta = dna_fasta, chrom = row['chrom'], const_region_start = int(row['exon_aft_start']), const_region_end = int(row['exon_aft_end']), strand = row['strand'], gene = row['symbol_x'])
 
             row[['upstream_region_translated_frame', 'annotated_peptide', 'blast_expected_value', 'blast_gene']] = blast_results[0], blast_results[1], blast_results[2], blast_results[3]
-            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'upstream_region_translated_frame'] = blast_results[0]
-            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'annotated_peptide'] = blast_results[1]
-            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_expected_value'] = blast_results[2]
-            unique_events_of_interest.at[unique_events_of_interest.index[idx], 'blast_gene'] = blast_results[3]
+            chunk_df.at[chunk_df.index[idx], 'upstream_region_translated_frame'] = blast_results[0]
+            chunk_df.at[chunk_df.index[idx], 'annotated_peptide'] = blast_results[1]
+            chunk_df.at[chunk_df.index[idx], 'blast_expected_value'] = blast_results[2]
+            chunk_df.at[chunk_df.index[idx], 'blast_gene'] = blast_results[3]
 
             del blast_results
             gc.collect()
         
-        shared_obj.append(unique_events_of_interest)
+        shared_obj.append(chunk_df)
         return shared_obj # converts pandas DF to list
             
     if args.frameMatch:
         
         number_of_processes = math.ceil(multiprocessing.cpu_count()*.70) # use 70% of available CPUs
+
         df_chunks = numpy.array_split(unique_events_of_interest, number_of_processes) # returns a list of dataframes split into chunks matching number of processes available
         
         shared_list = multiprocessing.Manager().list()
         
-        parallelized_jobs = [multiprocessing.Process(target=match_frame, args = (df_chunks[dfs], dfs, shared_list, )) for dfs in range(0, len(df_chunks))]
+        parallelized_jobs = [multiprocessing.Process(target=match_frame, args = (df_chunks[dfs], dfs, dna_fasta, shared_list, )) for dfs in range(0, len(df_chunks))]
         
         for processes in parallelized_jobs:
             processes.start()
