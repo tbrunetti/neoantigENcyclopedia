@@ -242,8 +242,15 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
         
         # create a new DNA that extracts and merges the continuous ORF regions into a new DNA sequence from genomic fasta
         if ase_end == None: # sometimes there will not be an end and should be translated through the whole region -- such as alt 5' and alt 3' events
-            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
-            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
+            try:
+                left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
+            except ValueError:
+                left = ''
+            
+            try:
+                right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
+            except ValueError:
+                right = ''
             
             event_index = [len(left.sequence), len(right.sequence)]
             
@@ -257,20 +264,45 @@ def calculate_orfs(event_type :str, fasta : Bio.File._IndexedSeqFileDict, kmer_l
        
         
         elif args.eventType == 'exon_skip':
-            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
-            event_left = Dna(fasta[chrom].seq[ase_start : ase_start + 3]) # always 3 nucleotides last full codon of exon is max
-            event_right = Dna(fasta[chrom].seq[ase_end - 4 : ase_end - 1]) # always 3 nucleotides first full codon of exon is max
-            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
-
-            event_index = [len(left.sequence), len(left.sequence + event_left.sequence + event_right.sequence)-1]
+            try:
+                left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
+            except ValueError:
+                left = ''
             
+            try:
+                event_left = Dna(fasta[chrom].seq[ase_start : ase_start + 3]) # always 3 nucleotides last full codon of exon is max
+            except ValueError:
+                event_left = ''
+            
+            try:
+                event_right = Dna(fasta[chrom].seq[ase_end - 4 : ase_end - 1]) # always 3 nucleotides first full codon of exon is max
+            except ValueError:
+                event_right = ''
+                
+            try:
+                right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
+            except ValueError:
+                right = ''
+                
+            event_index = [len(left.sequence), len(left.sequence + event_left.sequence + event_right.sequence)-1]
             return event_index, Dna(left.sequence + event_left.sequence + event_right.sequence + right.sequence)
 
         
         else:
-            left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
-            event = Dna(fasta[chrom].seq[ase_start - 1 : ase_end])
-            right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
+            try:
+                left = Dna(fasta[chrom].seq[flank_left_start - 1 : flank_left_end])
+            except ValueError:
+                left = ''
+            
+            try:
+                event = Dna(fasta[chrom].seq[ase_start - 1 : ase_end])
+            except ValueError:
+                event = ''
+                
+            try:
+                right = Dna(fasta[chrom].seq[flank_right_start - 1 : flank_right_end])
+            except:
+                right = ''
 
         # index where the start of the event and end of the event  occurs
         event_index = [len(left.sequence), len(left.sequence + event.sequence)-1]
@@ -627,6 +659,8 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     description:
     return:
     '''
+    
+    '''
     # dictionary that stores all ORF peptides for each event
     peptides = {}
     match_frame_results = [] # stores list of collect_results output from parallelizatoin of match_frame, assuming --frameMatch is set
@@ -723,15 +757,18 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
         
         unique_events_of_interest = pandas.concat(shared_list)
         
-        unique_events_of_interest.to_csv("/home/tonya/software/neoantigENcyclopedia/neojunction/test_parallel_exon_skip_testing_blast_03212021.txt", sep = '\t', index=False)
-    
-    #unique_events_of_interest = pandas.read_csv("/home/tonya/software/neoantigENcyclopedia/neojunction/test_parallel_exon_skip_testing_blast_03212021.txt", sep = '\t')
-    #filter_annotations = unique_events_of_interest.loc[unique_events_of_interest['annotated_peptide'] != 'none found'] # remove rows where a blast hit to a protein was not found
-    #unique_events_of_interest = filter_annotations
-    #del filter_annotations
-    #gc.collect()
-
+        unique_events_of_interest.to_csv("test_parallel_exon_skip_testing_blast_03212021.txt", sep = '\t', index=False)
     '''
+    
+    '''
+    TODO add --outdir args for any read and write csv functions
+    '''
+    unique_events_of_interest = pandas.read_csv("test_parallel_exon_skip_testing_blast_03212021.txt", sep = '\t')
+    filter_annotations = unique_events_of_interest.loc[unique_events_of_interest['annotated_peptide'] != 'none found'] # remove rows where a blast hit to a protein was not found
+    unique_events_of_interest = filter_annotations
+    del filter_annotations
+    gc.collect()
+
     # check if strandSTAR and strand are concordant
     #       if not concordant, check if strandSTAR is ud
     #            if ud, then use strand
@@ -739,36 +776,74 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     unique_events_of_interest.reset_index(drop=True, inplace = True)
     unique_events_of_interest['translated_ase_peptide'] = ''
     
-    for idx,row in unique_events_of_interest.iterrows():
-        print(idx)
-        try:
-            assert row['strandSTAR_pre'] == row['strandSTAR_aft'], 'There is a strand conflict at the following event_id: {}.  Skipping this event.'.format(row['event_id'])
-        except  AssertionError as err:
-            print(err)
-            continue
+    
+    ### parallelization of calculation and tranlation of orfs
+    
+    def get_peptides(chunk_df : pandas.DataFrame, shared_peptides : Dict[str, Dict[str,str]], shared_dfs : list ) -> Tuple[Dict[str, Dict[str,str]], list]:    
         
-        # args.kmer has one subtracted since the ase event is built into the upsteam and downstream contant exons    
+        fasta = SeqIO.index(args.fasta, 'fasta')
         
-        if ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] == 'ud')): # note it does not matter if we use strandSTAR_pre for strandStar_aft since we already checked the assertion that the STAR strands are concordant with each other
-            #orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
-            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
-            peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = peptides)
+        # reset index so that each dataframe chunk has the right index ID corresponding to the iterrows() index
+        chunk_df.reset_index(drop=True, inplace = True)
         
-        elif ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] != 'ud')):
+        for idx,row in chunk_df.iterrows():
+            print(idx)
             try:
-                if args.testMode: # forces the translation despite mismatch or NaN and use spladder's strand since just for testing mode
-                    orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
-                    peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
-            except:
-                    print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_pre'], row['strand']))
-                    continue
+                assert row['strandSTAR_pre'] == row['strandSTAR_aft'], 'There is a strand conflict at the following event_id: {}.  Skipping this event.'.format(row['event_id'])
+            except  AssertionError as err:
+                print(err)
+                continue
+            
+            # args.kmer has one subtracted since the ase event is built into the upsteam and downstream contant exons    
+            
+            if ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] == 'ud')): # note it does not matter if we use strandSTAR_pre for strandStar_aft since we already checked the assertion that the STAR strands are concordant with each other
+                #orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end']), flank_right_start = int(row['exon_aft_start']), flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_start']), ase_end = int(row['exon_end']))
+                orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = fasta, kmer_length = args.kmer - 1, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
+                shared_peptides = translate_orfs(event_id = row['event_id'], orfs =  orfs, peptide_bank = shared_peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
+                chunk_df.at[chunk_df.index[idx], 'translated_ase_peptide'] = shared_peptides[row['event_id']]
+                shared_dfs.append(chunk_df)
+
+            elif ((row['strandSTAR_pre'] != row['strand']) & (row['strandSTAR_pre'] != 'ud')):
+                try:
+                    if args.testMode: # forces the translation despite mismatch or NaN and use spladder's strand since just for testing mode
+                        orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = fasta, kmer_length = args.kmer - 1, strand = row['strand'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
+                        shared_peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = shared_peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
+                        chunk_df.at[chunk_df.index[idx], 'translated_ase_peptide'] = shared_peptides[row['event_id']]
+                        shared_dfs.append(chunk_df)
+
+                except:
+                        print('star strand is {} and spladder strands is {}.  Skipping event.'.format(row['strandSTAR_pre'], row['strand']))
+                        continue
+            
+            elif (row['strandSTAR_pre'] == row['strand']):
+                orfs, check_frame_region = calculate_orfs(event_type = args.eventType, fasta = fasta, kmer_length = args.kmer - 1, strand = row['strandSTAR_pre'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
+                shared_peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = shared_peptides, upstream_const = row['upstream_region_translated_frame'], correct_frame_only = args.frameMatch, frame_check = check_frame_region)
+                chunk_df.at[chunk_df.index[idx], 'translated_ase_peptide'] = shared_peptides[row['event_id']]
+                shared_dfs.append(chunk_df)
+
+            del orfs
+            gc.collect() 
+
+        return shared_peptides, shared_dfs
         
-        elif (row['strandSTAR_pre'] == row['strand']):
-            orfs = calculate_orfs(event_type = args.eventType, fasta = dna_fasta, kmer_length = args.kmer - 1, strand = row['strandSTAR_pre'], chrom = row['chrom'], flank_left_start = int(row['exon_pre_start']), flank_left_end = int(row['exon_pre_end'])-3, flank_right_start = int(row['exon_aft_start'])+3, flank_right_end = int(row['exon_aft_end']), ase_start = int(row['exon_pre_end'])-3, ase_end = int(row['exon_aft_start'])+3)
-            peptides = translate_orfs(event_id = row['event_id'], orfs = orfs, peptide_bank = peptides)
+    number_of_processes = math.ceil(multiprocessing.cpu_count()*.70) # use 70% of available CPUs
+    df_chunks = numpy.array_split(unique_events_of_interest, number_of_processes) # returns a list of dataframes split into chunks matching number of processes available
+    shared_peptides = multiprocessing.Manager().dict()
+    shared_dfs = multiprocessing.Manager().list()  
+    parallelized_jobs = [multiprocessing.Process(target=get_peptides, args = (df_chunks[dfs], shared_peptides, shared_dfs, )) for dfs in range(0, len(df_chunks))]
         
-        del orfs
-        gc.collect() 
+    for processes in parallelized_jobs:
+        processes.start()
+        
+    for processes in parallelized_jobs:
+        processes.join()
+    
+    #unique_events_of_interest = pandas.DataFrame.from_dict(shared_peptides, orient = 'index') # use key as row names/index name
+        
+    unique_events_of_interest.to_csv("test_parallel_exon_skip_testing_blast_03292022_RESULTS.txt", sep = '\t', index=False)
+    '''
+    
+
    
     # TO DO: calcuate percent overlap of kmer with flanking region
     
@@ -781,8 +856,8 @@ def exon_skip(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> 
     unique_events_of_interest.filter(regex = '^mean_', axis = 1)
     # get log2FC of differential testing in event counts and gene expression levels columns
     unique_events_of_interest.filter(regex = '^log2FC_', axis = 1)
-    '''
-   
+
+   '''
 
 
 def three_prime_alt(junctions : pandas.DataFrame, spladderOut : str, outdir : str) -> None:
