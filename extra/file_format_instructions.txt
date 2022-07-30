@@ -1,0 +1,3 @@
+# gets the gene_id from ensembl to match the gene_name for blast
+grep -Pwon "gene_id (.+?);|gene_name (.+?);" Mus_musculus.GRCm38.102.gtf
+
